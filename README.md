@@ -1,10 +1,10 @@
-# Tommy Memory Cleaner v0.2.0
+# Tommy Memory Cleaner v0.3.0
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Tray controls
-- Taskbar-aware placement
+- Console mode
+- Script and Task Scheduler support
 
 ## Requirements
 - Windows 10 or 11, 64-bit
