@@ -113,94 +113,54 @@ setTimeout(() => { isInitializing = false; }, 500);
 // Funzione per chiudere il menu
 function closeMenu() {
     if (isInitializing) return;
+    
+    // Cancella il timer di chiusura automatica
+    if (autoCloseTimer) {
+        clearTimeout(autoCloseTimer);
+        autoCloseTimer = null;
+    }
+    
+    document.body.classList.remove('menu-open');
     win.hide().catch(() => {});
 }
 
-// FIX: Rimosso listener blur - il menu non deve chiudersi quando la finestra perde il focus
-// (può succedere anche quando passi sopra il menu), ma solo quando si clicca fuori
+// Timer per chiusura automatica dopo 5 secondi
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
-// FIX: Rimosso listener focusout - il menu non deve chiudersi quando la finestra perde il focus,
-// ma solo quando si clicca fuori (gestito dai listener click/mousedown)
+// Funzione per mostrare il menu
+function showMenu() {
+    document.body.classList.add('menu-open');
+    
+    // Cancella timer precedente se esiste
+    if (autoCloseTimer) {
+        clearTimeout(autoCloseTimer);
+        autoCloseTimer = null;
+    }
+    
+    // Imposta chiusura automatica dopo 5 secondi
+    autoCloseTimer = setTimeout(() => {
+        closeMenu();
+        autoCloseTimer = null;
+    }, 5000);
+}
 
-// Chiudi quando si clicca fuori - usa click invece di mousedown
-document.addEventListener('click', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (menuContainer && !menuContainer.contains(target)) {
+// Mostra il menu quando la finestra diventa visibile
+if (!document.hidden) {
+    showMenu();
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        showMenu();
+    } else {
         closeMenu();
     }
-}, true); // Usa capture phase per catturare prima che l'evento venga gestito
-
-// Chiudi quando si clicca fuori - anche con mousedown come fallback
-document.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (menuContainer && !menuContainer.contains(target)) {
-        closeMenu();
-    }
-}, true);
+});
 
 // Chiudi quando si preme ESC
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeMenu();
-    }
-});
-
-// FIX: Rimosso listener focusout duplicato - il menu si chiude solo quando si clicca fuori
-
-// Listener per click sul body (overlay trasparente) - più aggressivo
-// Usa window invece di document.body per catturare meglio
-window.addEventListener('click', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as HTMLElement;
-    // Se il click è sul body/html o su un elemento che non è il menu, chiudi
-    if (!target || 
-        target === document.body || 
-        target === document.documentElement ||
-        (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-        return false;
-    }
-}, true);
-
-// Listener aggiuntivo per mousedown
-window.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as HTMLElement;
-    if (!target || 
-        target === document.body || 
-        target === document.documentElement ||
-        (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-        return false;
-    }
-}, true);
-
-// FIX: Rimosso listener mouseleave - il menu non deve chiudersi quando il mouse esce,
-// ma solo quando si clicca fuori (gestito dai listener click/mousedown sopra)
-
-// FIX: Rimosso listener focusout duplicato - il menu si chiude solo quando si clicca fuori
-
-// Listener aggiuntivo per mousedown sul body
-document.body.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (target === document.body || (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-    }
-}, true);
-
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-        // Ricarica sempre la configurazione quando la finestra diventa visibile
-        loadConfig();
     }
 });
 

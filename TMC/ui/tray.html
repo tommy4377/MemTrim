@@ -19,6 +19,18 @@
             overflow: hidden;
             background: transparent;
         }
+        
+        /* Overlay trasparente per catturare click fuori dal menu */
+        .click-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            z-index: 1;
+            pointer-events: auto;
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -40,6 +52,11 @@
             overflow: hidden;
             pointer-events: auto !important;
             z-index: 1000;
+        }
+        
+        /* Nascondi overlay quando menu è chiuso */
+        body:not(.menu-open) .click-overlay {
+            display: none;
         }
 
         body[data-theme="light"] .menu-container {
