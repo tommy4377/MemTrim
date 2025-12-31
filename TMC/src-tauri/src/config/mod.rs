@@ -136,20 +136,31 @@ impl Profile {
     pub fn get_memory_areas(&self) -> Areas {
         match self {
             Profile::Normal => {
-                // Profilo leggero: aree essenziali + registry cache (molto leggero e efficace)
+                // Light profile: Essential and safest areas only
+                // - WORKING_SET: Core optimization, high impact, safe (critical processes protected)
+                // - MODIFIED_PAGE_LIST: Very safe, clears pages waiting for disk write
+                // - REGISTRY_CACHE: Lightweight, very safe, cache rebuilds automatically
+                // Excludes: STANDBY_LIST, SYSTEM_FILE_CACHE, MODIFIED_FILE_CACHE (too aggressive for light profile)
+                // Excludes: STANDBY_LIST_LOW, COMBINED_PAGE_LIST (advanced/aggressive areas)
                 Areas::WORKING_SET 
                 | Areas::MODIFIED_PAGE_LIST
                 | Areas::REGISTRY_CACHE
             },
             Profile::Balanced => {
-                // Profilo bilanciato: aree principali + modified file cache + registry cache per efficienza
+                // Balanced profile: Good balance between memory freed and system performance
+                // Includes all Normal areas plus:
+                // - STANDBY_LIST: High memory freed, safe, low-medium performance impact
+                // - SYSTEM_FILE_CACHE: High memory freed, safe with auto-rebuild
+                // - MODIFIED_FILE_CACHE: More aggressive cache flush, high impact (if available)
+                // Excludes: STANDBY_LIST_LOW, COMBINED_PAGE_LIST (too aggressive for balanced profile)
                 let mut areas = Areas::WORKING_SET
                     | Areas::MODIFIED_PAGE_LIST 
                     | Areas::STANDBY_LIST
                     | Areas::SYSTEM_FILE_CACHE
                     | Areas::REGISTRY_CACHE;
                 
-                // Aggiungi Modified File Cache se disponibile (utile per performance)
+                // Add Modified File Cache if available (Windows 10 1803+)
+                // This provides more thorough cache flushing than SYSTEM_FILE_CACHE alone
                 if crate::os::has_modified_file_cache() {
                     areas |= Areas::MODIFIED_FILE_CACHE;
                     tracing::debug!("Balanced profile: MODIFIED_FILE_CACHE available");
@@ -158,18 +169,22 @@ impl Profile {
                 areas
             },
             Profile::Gaming => {
-                // FIX: Gaming profile usa TUTTE le aree disponibili per massime prestazioni
+                // Aggressive profile: All available areas for maximum memory freeing
+                // Suitable for gaming and resource-intensive applications
+                // Includes all areas from Balanced plus:
+                // - STANDBY_LIST_LOW: Low-priority standby memory (if available)
+                // - COMBINED_PAGE_LIST: Most aggressive optimization (if available)
+                // Note: Final validation in engine.rs will remove unavailable areas
                 let mut areas = Areas::empty();
                 
-                // Aree base sempre disponibili
+                // Base areas (always available)
                 areas |= Areas::WORKING_SET;
                 areas |= Areas::MODIFIED_PAGE_LIST;
                 areas |= Areas::STANDBY_LIST;
                 areas |= Areas::SYSTEM_FILE_CACHE;
                 areas |= Areas::REGISTRY_CACHE;
                 
-                // Aree avanzate (solo se disponibili su questa versione di Windows)
-                // La validazione finale in engine.rs rimuoverà quelle non disponibili
+                // Advanced areas (version-dependent)
                 if crate::os::has_standby_list_low() {
                     areas |= Areas::STANDBY_LIST_LOW;
                     tracing::debug!("Gaming profile: STANDBY_LIST_LOW available");
@@ -603,24 +618,113 @@ impl Config {
     pub fn save(&self) -> io::Result<()> {
         let path = config_path();
         
-        // Usa data_dir per assicurarsi che la directory esista
+        // ⭐ Fallback 1: Assicurati che la directory esista con retry
         {
             let portable = PORTABLE.read();
             let data_dir = portable.data_dir();
             if !data_dir.exists() {
-                fs::create_dir_all(data_dir)?;
+                // Retry fino a 3 volte per creare la directory
+                let mut last_error = None;
+                for attempt in 1..=3 {
+                    match fs::create_dir_all(&data_dir) {
+                        Ok(_) => {
+                            tracing::info!("Created data directory: {}", data_dir.display());
+                            break;
+                        }
+                        Err(e) => {
+                            let error_msg = format!("{}", e);
+                            last_error = Some(e);
+                            tracing::warn!("Failed to create data directory (attempt {}): {}", attempt, error_msg);
+                            if attempt < 3 {
+                                std::thread::sleep(std::time::Duration::from_millis(100 * attempt as u64));
+                            }
+                        }
+                    }
+                }
+                if let Some(e) = last_error {
+                    return Err(e);
+                }
             }
         }
         
+        // ⭐ Fallback 2: Crea anche il parent directory se necessario
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
         }
         
-        let content = serde_json::to_string_pretty(self)?;
+        // ⭐ Fallback 3: Serializza con retry
+        let content = match serde_json::to_string_pretty(self) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to serialize config: {:?}", e);
+                return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Serialization error: {}", e)));
+            }
+        };
         
+        // ⭐ Fallback 4: Salvataggio atomico con retry e backup
         let temp_path = path.with_extension("tmp");
-        fs::write(&temp_path, content)?;
-        fs::rename(temp_path, path)?;
+        let backup_path = path.with_extension("json.bak");
+        
+        // Crea backup del file esistente se presente
+        if path.exists() {
+            if let Err(e) = fs::copy(&path, &backup_path) {
+                tracing::warn!("Failed to create backup: {:?}", e);
+                // Non bloccare il salvataggio se il backup fallisce
+            }
+        }
+        
+        // Retry fino a 3 volte per scrivere il file temporaneo
+        let mut last_error = None;
+        for attempt in 1..=3 {
+            match fs::write(&temp_path, &content) {
+                Ok(_) => break,
+                Err(e) => {
+                    let error_msg = format!("{}", e);
+                    last_error = Some(e);
+                    tracing::warn!("Failed to write temp config (attempt {}): {}", attempt, error_msg);
+                    if attempt < 3 {
+                        std::thread::sleep(std::time::Duration::from_millis(50 * attempt as u64));
+                    }
+                }
+            }
+        }
+        
+        if let Some(e) = last_error.take() {
+            tracing::error!("Failed to write config after retries, restoring from backup if available");
+            // Ripristina backup se disponibile
+            if backup_path.exists() && path.exists() {
+                let _ = fs::copy(&backup_path, &path);
+            }
+            return Err(e);
+        }
+        
+        // ⭐ Fallback 5: Rename atomico con retry
+        for attempt in 1..=3 {
+            match fs::rename(&temp_path, &path) {
+                Ok(_) => {
+                    tracing::debug!("Config saved successfully to: {}", path.display());
+                    // Rimuovi backup vecchio se tutto ok
+                    if backup_path.exists() {
+                        let _ = fs::remove_file(&backup_path);
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to rename temp config (attempt {}): {:?}", attempt, e);
+                    if attempt < 3 {
+                        std::thread::sleep(std::time::Duration::from_millis(50 * attempt as u64));
+                    } else {
+                        // Ultimo tentativo fallito, ripristina backup
+                        if backup_path.exists() && path.exists() {
+                            let _ = fs::copy(&backup_path, &path);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+        }
         
         Ok(())
     }
