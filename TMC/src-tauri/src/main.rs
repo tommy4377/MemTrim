@@ -27,7 +27,7 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::WebviewUrl;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, GlobalShortcutExt};
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_positioner::{WindowExt, Position};
+use tauri_plugin_positioner;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use scopeguard;
@@ -1318,6 +1318,12 @@ fn cmd_save_config(app: tauri::AppHandle, state: tauri::State<'_, AppState>, cfg
         update_bool!(minimize_to_tray);
         update_bool!(show_opt_notifications);
 update_bool!(close_after_opt);
+        // ⭐ Setup completed - importante per evitare che il setup si apra più volte
+        if let Some(v) = obj.get("setup_completed") {
+            if let Some(b) = v.as_bool() {
+                current_cfg.setup_completed = b;
+            }
+        }
         // Handle run_on_startup specially - it needs to call the system function
         if let Some(v) = obj.get("run_on_startup") {
             if let Some(b) = v.as_bool() {
@@ -1379,13 +1385,28 @@ update_bool!(close_after_opt);
     // Validate and save
     current_cfg.validate();
     
-    // FIX #2: Rilascia il lock il prima possibile - salva la config e poi rilascia
+    // ⭐ FIX #2: Rilascia il lock il prima possibile - salva la config con retry e poi rilascia
     {
         let mut guard = state.cfg.lock()
             .map_err(|_| "Config lock poisoned".to_string())?;
         *guard = current_cfg.clone();
-        // Salva prima di rilasciare il lock
-        guard.save().map_err(|e| e.to_string())?;
+        
+        // ⭐ Salvataggio con retry per maggiore affidabilità
+        let save_result = guard.save();
+        match save_result {
+            Ok(_) => {
+                tracing::debug!("Config saved successfully");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to save config: {:?}, retrying...", e);
+                // Retry una volta dopo un breve delay
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                guard.save().map_err(|e2| {
+                    tracing::error!("Failed to save config on retry: {:?}", e2);
+                    format!("Failed to save config: {}", e2)
+                })?;
+            }
+        }
         // Lock viene rilasciato qui automaticamente
     }
     
@@ -1544,13 +1565,50 @@ fn cmd_complete_setup(
         }
     }
     
-    // Segna il setup come completato
+    // ⭐ Segna il setup come completato e salva con retry
     cfg.setup_completed = true;
-    cfg.save().map_err(|e| e.to_string())?;
+    
+    // ⭐ Salvataggio con retry per assicurarsi che setup_completed venga salvato
+    let save_result = cfg.save();
+    match save_result {
+        Ok(_) => {
+            tracing::info!("Config saved successfully after setup completion");
+        }
+        Err(e) => {
+            tracing::error!("Failed to save config after setup: {:?}", e);
+            // ⭐ Retry una volta dopo un breve delay
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            match cfg.save() {
+                Ok(_) => {
+                    tracing::info!("Config saved successfully on retry");
+                }
+                Err(e2) => {
+                    tracing::error!("Failed to save config on retry: {:?}", e2);
+                    return Err(format!("Failed to save config: {}", e2));
+                }
+            }
+        }
+    }
+    
+    // ⭐ Verifica che setup_completed sia stato salvato correttamente
+    let config_path = crate::config::get_portable_detector().config_path();
+    if config_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(setup_completed) = json.get("setup_completed").and_then(|v| v.as_bool()) {
+                    if !setup_completed {
+                        tracing::warn!("setup_completed not saved correctly, forcing save again");
+                        cfg.setup_completed = true;
+                        let _ = cfg.save();
+                    }
+                }
+            }
+        }
+    }
     
     // Log delle impostazioni applicate per debug
-    tracing::info!("Setup completed - Theme: {}, Language: {}, AlwaysOnTop: {}, ShowNotifications: {}, RunOnStartup: {}", 
-        cfg.theme, cfg.language, cfg.always_on_top, cfg.show_opt_notifications, cfg.run_on_startup);
+    tracing::info!("Setup completed - Theme: {}, Language: {}, AlwaysOnTop: {}, ShowNotifications: {}, RunOnStartup: {}, SetupCompleted: {}", 
+        cfg.theme, cfg.language, cfg.always_on_top, cfg.show_opt_notifications, cfg.run_on_startup, cfg.setup_completed);
     
     // Prepara i dati per la sincronizzazione PRIMA di creare/mostrare la finestra
     let theme = cfg.theme.clone();
@@ -1980,6 +2038,179 @@ fn cmd_show_notification(app: tauri::AppHandle, title: String, message: String, 
     show_windows_notification(&app, &title, &message, &theme)
 }
 
+// ============= TRAY MENU MANAGEMENT (ROBUST) =============
+/// Mostra il tray menu con retry e fallback robusti
+async fn show_tray_menu_with_retry(app: &AppHandle) {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 100;
+    
+    for attempt in 1..=MAX_RETRIES {
+        tracing::debug!("Attempting to show tray menu (attempt {}/{})", attempt, MAX_RETRIES);
+        
+        // Prova prima a ottenere la finestra esistente
+        if let Some(menu_win) = app.get_webview_window("tray_menu") {
+            // ⭐ Aggiungi event handler per chiusura automatica (se non già presente)
+            let menu_win_clone = menu_win.clone();
+            menu_win.on_window_event(move |event| {
+                match event {
+                    tauri::WindowEvent::Focused(false) => {
+                        // Quando il menu perde il focus, nascondilo
+                        tracing::debug!("Tray menu lost focus, hiding...");
+                        let _ = menu_win_clone.hide();
+                    }
+                    _ => {}
+                }
+            });
+            
+            // Verifica che la finestra sia valida
+            if let Ok(is_visible) = menu_win.is_visible() {
+                // Se già visibile, non fare nulla
+                if is_visible {
+                    tracing::debug!("Tray menu already visible, resetting auto-close timer");
+                    // Reset del timer di chiusura automatica nel frontend
+                    let _ = menu_win.eval(r#"
+                        if (typeof showMenu === 'function') {
+                            showMenu();
+                        }
+                    "#);
+                    return;
+                }
+            }
+            
+            // Posiziona prima di mostrare (evita lampeggio)
+            position_tray_menu(&menu_win);
+            
+            // Piccolo delay per assicurarsi che il posizionamento sia completato
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            
+            // Mostra il menu con retry
+            match menu_win.show() {
+                Ok(_) => {
+                    tracing::info!("Tray menu shown successfully (attempt {})", attempt);
+                    
+                    // ⭐ INDISPENSABILE: Imposta il focus per ricevere eventi di focus su Windows
+                    if let Err(e) = menu_win.set_focus() {
+                        tracing::warn!("Failed to set focus on tray menu: {:?}", e);
+                    }
+                    
+                    // Verifica che sia effettivamente visibile
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    
+                    if let Ok(is_visible) = menu_win.is_visible() {
+                        if is_visible {
+                            // Chiama loadConfig per applicare tema e colori
+                            let _ = menu_win.eval(r#"
+                                if (typeof loadConfig === 'function') {
+                                    loadConfig();
+                                }
+                                if (typeof showMenu === 'function') {
+                                    showMenu();
+                                }
+                            "#);
+                            
+                            return;
+                        } else {
+                            tracing::warn!("Menu show() succeeded but window is not visible (attempt {})", attempt);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to show tray menu (attempt {}): {:?}", attempt, e);
+                }
+            }
+        } else {
+            // Finestra non esiste, creala
+            tracing::info!("Tray menu window does not exist, creating it (attempt {})", attempt);
+            
+            let app_clone = app.clone();
+            match WebviewWindowBuilder::new(
+                &app_clone,
+                "tray_menu",
+                WebviewUrl::App("tray.html".into())
+            )
+            .inner_size(160.0, 120.0)
+            .skip_taskbar(true)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .visible(false)
+            .shadow(false)
+            .resizable(false)
+            .focused(true)  // ⭐ INDISPENSABILE su Windows per ricevere eventi di focus
+            .build() {
+                Ok(menu_win) => {
+                    tracing::info!("Tray menu window created successfully (attempt {})", attempt);
+                    
+                    // ⭐ Gestisci la perdita di focus per chiudere automaticamente il menu
+                    let menu_win_clone = menu_win.clone();
+                    menu_win.on_window_event(move |event| {
+                        match event {
+                            tauri::WindowEvent::Focused(false) => {
+                                // Quando il menu perde il focus, nascondilo
+                                tracing::debug!("Tray menu lost focus, hiding...");
+                                let _ = menu_win_clone.hide();
+                            }
+                            _ => {}
+                        }
+                    });
+                    
+                    // Posiziona prima di mostrare
+                    position_tray_menu(&menu_win);
+                    
+                    // Piccolo delay per assicurarsi che il posizionamento sia completato
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    
+                    // Mostra la finestra
+                    match menu_win.show() {
+                        Ok(_) => {
+                            tracing::info!("Newly created tray menu shown successfully (attempt {})", attempt);
+                            
+                            // ⭐ INDISPENSABILE: Imposta il focus per ricevere eventi di focus su Windows
+                            if let Err(e) = menu_win.set_focus() {
+                                tracing::warn!("Failed to set focus on newly created tray menu: {:?}", e);
+                            }
+                            
+                            // Verifica che sia effettivamente visibile
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            
+                            if let Ok(is_visible) = menu_win.is_visible() {
+                                if is_visible {
+                                    // Chiama loadConfig per applicare tema e colori
+                                    let _ = menu_win.eval(r#"
+                                        if (typeof loadConfig === 'function') {
+                                            loadConfig();
+                                        }
+                                        if (typeof showMenu === 'function') {
+                                            showMenu();
+                                        }
+                                    "#);
+                                    
+                                    return;
+                                } else {
+                                    tracing::warn!("Menu show() succeeded but window is not visible after creation (attempt {})", attempt);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to show newly created tray menu (attempt {}): {:?}", attempt, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to create tray menu window (attempt {}): {:?}", attempt, e);
+                }
+            }
+        }
+        
+        // Se non è riuscito, aspetta prima di riprovare
+        if attempt < MAX_RETRIES {
+            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS * attempt as u64)).await;
+        }
+    }
+    
+    tracing::error!("Failed to show tray menu after {} attempts", MAX_RETRIES);
+}
+
 fn show_or_create_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_skip_taskbar(false);  // Mostra nella taskbar
@@ -2230,82 +2461,105 @@ fn run_console_mode(args: &[String]) {
 }
 
 fn position_tray_menu(window: &tauri::WebviewWindow) {
-    // Posiziona il menu vicino alla tray icon (sopra di default)
-    let _ = window.move_window(Position::TrayBottomRight);
+    // Ottieni le dimensioni del menu
+    let menu_size = match window.outer_size() {
+        Ok(size) => size,
+        Err(e) => {
+            tracing::error!("Failed to get menu size: {:?}", e);
+            return;
+        }
+    };
     
-    // Aspetta un po' per assicurarsi che il posizionamento iniziale sia completato
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    let menu_width = menu_size.width as i32;
+    let menu_height = menu_size.height as i32;
     
-    // Usa le API Windows per ottenere la posizione esatta della taskbar
-    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
-        if let Some(monitor) = window.current_monitor().ok().flatten() {
-            let monitor_size = monitor.size();
-            let monitor_pos = monitor.position();
-            let screen_top = monitor_pos.y;
-            let screen_bottom = monitor_pos.y + monitor_size.height as i32;
-            let menu_height = size.height as i32;
-            let menu_top = pos.y;
-            let menu_bottom = pos.y + menu_height;
-            
-            // Ottieni la posizione della taskbar
-            if let Some((taskbar_left, taskbar_top, taskbar_right, taskbar_bottom)) = get_taskbar_rect() {
-                // Determina dove si trova la taskbar
-                let taskbar_height = taskbar_bottom - taskbar_top;
-                let taskbar_width = taskbar_right - taskbar_left;
-                
-                // Se la taskbar è più larga che alta, è in alto o in basso
-                // Se è più alta che larga, è a sinistra o destra (non influisce sul posizionamento verticale)
-                let is_taskbar_vertical = taskbar_width < taskbar_height;
-                
-                if !is_taskbar_vertical {
-                    // Taskbar orizzontale (alto o basso)
-                    if taskbar_top <= screen_top + 10 {
-                        // Taskbar in ALTO (stile macOS/Linux con StartAllBack)
-                        // Posiziona il menu SOTTO la taskbar (quindi più in basso)
-                        let taskbar_bottom_y = taskbar_bottom;
-                        if menu_top < taskbar_bottom_y + 5 {
-                            // Il menu è troppo in alto, spostalo sotto la taskbar
-                            let new_y = taskbar_bottom_y + 5; // 5px margine sotto la taskbar
-                            
-                            tracing::debug!("Taskbar in alto: taskbar_bottom={}, menu_top={}, new_y={}", 
-                                taskbar_bottom_y, menu_top, new_y);
-                            
-                            let _ = window.set_position(tauri::PhysicalPosition {
-                                x: pos.x,
-                                y: new_y,
-                            });
-                        }
-                    } else if taskbar_top >= screen_bottom - 100 {
-                        // Taskbar in BASSO (classica Windows)
-                        // Posiziona il menu SOPRA la taskbar
-                        if menu_bottom > taskbar_top - 5 {
-                            // Il menu va sotto la taskbar, spostalo sopra
-                            let new_y = taskbar_top - menu_height - 5; // 5px margine sopra la taskbar
-                            let final_y = new_y.max(screen_top + 5); // Almeno 5px dal top
-                            
-                            tracing::debug!("Taskbar in basso: taskbar_top={}, menu_bottom={}, new_y={}, final_y={}", 
-                                taskbar_top, menu_bottom, new_y, final_y);
-                            
-                            let _ = window.set_position(tauri::PhysicalPosition {
-                                x: pos.x,
-                                y: final_y,
-                            });
-                        }
-                    }
-                }
-            } else {
-                // Fallback: se non riusciamo a trovare la taskbar, usa margine conservativo
-                // Assumiamo taskbar in basso (default Windows)
-                let safe_bottom = screen_bottom - 80;
-                if menu_bottom > safe_bottom {
-                    let new_y = safe_bottom - menu_height - 5;
-                    let _ = window.set_position(tauri::PhysicalPosition {
-                        x: pos.x,
-                        y: new_y.max(screen_top + 5),
-                    });
-                }
+    // Ottieni il monitor corrente
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => m,
+        _ => {
+            tracing::error!("Failed to get current monitor");
+            return;
+        }
+    };
+    
+    let monitor_size = monitor.size();
+    let monitor_pos = monitor.position();
+    
+    // Ottieni la posizione del cursore (approssimazione della tray icon)
+    let cursor_pos = match window.cursor_position() {
+        Ok(pos) => pos,
+        Err(_) => {
+            // Fallback: usa l'angolo in basso a destra
+            tauri::PhysicalPosition {
+                x: (monitor_pos.x + monitor_size.width as i32 - 50) as f64,
+                y: (monitor_pos.y + monitor_size.height as i32 - 50) as f64,
             }
         }
+    };
+    
+    tracing::debug!("Cursor position: {:?}, Monitor: {}x{} at {:?}", 
+        cursor_pos, monitor_size.width, monitor_size.height, monitor_pos);
+    
+    // Determina la posizione della taskbar
+    let (final_x, final_y) = if let Some((taskbar_left, taskbar_top, taskbar_right, taskbar_bottom)) = get_taskbar_rect() {
+        let taskbar_height = taskbar_bottom - taskbar_top;
+        let taskbar_width = taskbar_right - taskbar_left;
+        let is_taskbar_vertical = taskbar_width < taskbar_height;
+        
+        tracing::debug!("Taskbar rect: ({}, {}, {}, {}), vertical: {}", 
+            taskbar_left, taskbar_top, taskbar_right, taskbar_bottom, is_taskbar_vertical);
+        
+        let cursor_x = cursor_pos.x as i32;
+        let cursor_y = cursor_pos.y as i32;
+        
+        if is_taskbar_vertical {
+            // Taskbar verticale (sinistra o destra)
+            if taskbar_left < monitor_pos.x + 100 {
+                // Taskbar a SINISTRA - menu a destra della tray
+                let x = taskbar_right + 5;
+                let y = (cursor_y - menu_height / 2).max(monitor_pos.y + 5);
+                (x, y)
+            } else {
+                // Taskbar a DESTRA - menu a sinistra della tray
+                let x = (taskbar_left - menu_width - 5).max(monitor_pos.x + 5);
+                let y = (cursor_y - menu_height / 2).max(monitor_pos.y + 5);
+                (x, y)
+            }
+        } else {
+            // Taskbar orizzontale (alto o basso)
+            // Centra il menu orizzontalmente rispetto al cursore
+            let x = (cursor_x - menu_width / 2)
+                .max(monitor_pos.x + 5)  // Non troppo a sinistra
+                .min(monitor_pos.x + monitor_size.width as i32 - menu_width - 5);  // Non troppo a destra
+            
+            if taskbar_top < monitor_pos.y + 100 {
+                // Taskbar in ALTO - menu SOTTO la taskbar
+                let y = taskbar_bottom + 5;
+                (x, y)
+            } else {
+                // Taskbar in BASSO - menu SOPRA la taskbar
+                let y = taskbar_top - menu_height - 5;
+                (x, y)
+            }
+        }
+    } else {
+        // Fallback: nessuna info taskbar, usa posizione sicura
+        tracing::warn!("Could not get taskbar rect, using fallback positioning");
+        let x = (cursor_pos.x as i32 - menu_width / 2)
+            .max(monitor_pos.x + 5)
+            .min(monitor_pos.x + monitor_size.width as i32 - menu_width - 5);
+        let y = (monitor_pos.y + monitor_size.height as i32 - menu_height - 80).max(monitor_pos.y + 5);
+        (x, y)
+    };
+    
+    tracing::info!("Positioning tray menu at: ({}, {})", final_x, final_y);
+    
+    // Applica la posizione
+    if let Err(e) = window.set_position(tauri::PhysicalPosition {
+        x: final_x,
+        y: final_y,
+    }) {
+        tracing::error!("Failed to set menu position: {:?}", e);
     }
 }
 
@@ -2531,75 +2785,11 @@ fn main() {
                         let app_handle = tray.app_handle();
                         tracing::info!("Right click on tray icon detected");
                         
-                        if let Some(menu_win) = app_handle.get_webview_window("tray_menu") {
-                            tracing::info!("Tray menu window exists, showing it...");
-                            
-                            // Posiziona prima di mostrare (evita lampeggio)
-                            position_tray_menu(&menu_win);
-                            
-                            // Mostra il menu
-                            if let Err(e) = menu_win.show() { 
-                                tracing::error!("Failed to show tray menu: {:?}", e); 
-                            } else {
-                                tracing::info!("Tray menu shown successfully");
-                                
-                                // Aspetta che il DOM sia pronto prima di chiamare loadConfig
-                                std::thread::sleep(std::time::Duration::from_millis(100));
-                                
-                                // Chiama loadConfig per applicare tema e colori
-                                let _ = menu_win.eval(r#"
-                                    if (typeof loadConfig === 'function') {
-                                        loadConfig();
-                                    }
-                                "#);
-                            }
-                        } else {
-                            // Creazione lazy della finestra
-                            tracing::info!("Creating tray menu window...");
-                            let app_clone = app_handle.clone();
-                            match WebviewWindowBuilder::new(
-                                &app_clone,
-                                "tray_menu",
-                                WebviewUrl::App("tray.html".into())
-                            )
-                            .inner_size(160.0, 120.0)  // Dimensione normale del menu (160x120px)
-                            .skip_taskbar(true)
-                            .decorations(false)
-                            .transparent(true)
-                            .always_on_top(true)
-                            .visible(false)
-                            .shadow(false)  // Nessuna ombra per finestra trasparente
-                            .resizable(false)
-                            .focused(false)  // FIX: Non richiedere focus immediato
-                            .build() {
-                                Ok(menu_win) => {
-                                    tracing::info!("Tray menu window created successfully");
-                                    
-                                    // Posiziona prima di mostrare
-                                    position_tray_menu(&menu_win);
-                                    
-                                    // Mostra la finestra
-                                    if let Err(e) = menu_win.show() {
-                                        tracing::error!("Failed to show newly created tray menu: {:?}", e);
-                                    } else {
-                                        tracing::info!("Newly created tray menu shown");
-                                        
-                                        // Aspetta che il DOM sia pronto prima di chiamare loadConfig
-                                        std::thread::sleep(std::time::Duration::from_millis(100));
-                                        
-                                        // Chiama loadConfig per applicare tema e colori
-                                        let _ = menu_win.eval(r#"
-                                            if (typeof loadConfig === 'function') {
-                                                loadConfig();
-                                            }
-                                        "#);
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to create tray menu window: {:?}", e);
-                                }
-                            }
-                        }
+                        // Usa async runtime per gestire l'apertura in modo non bloccante
+                        let app_clone = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            show_tray_menu_with_retry(&app_clone).await;
+                        });
                     }
                     _ => {}
                 }
@@ -2639,12 +2829,43 @@ fn main() {
                 std::process::exit(0);
             }
             
-            // Controlla se è il primo avvio e mostra il setup
+            // ⭐ Controlla se è il primo avvio e mostra il setup
+            // Verifica anche che il file di config esista per evitare setup multipli
             let show_setup = {
+                // ⭐ Fallback 1: Verifica se la finestra setup è già aperta
+                if app_handle.get_webview_window("setup").is_some() {
+                    tracing::info!("Setup window already exists, skipping creation");
+                    return Ok(());
+                }
+                
                 let cfg_guard = _cfg_for_setup.lock();
-                cfg_guard.as_ref()
+                let should_show = cfg_guard.as_ref()
                     .map(|c| !c.setup_completed)
-                    .unwrap_or(true)
+                    .unwrap_or(true);
+                
+                // ⭐ Fallback 2: verifica anche se il file config esiste
+                // Se il file esiste ma setup_completed è false, potrebbe essere un problema
+                // In quel caso, assumiamo che il setup sia già stato fatto
+                if should_show {
+                    let config_path = crate::config::get_portable_detector().config_path();
+                    if config_path.exists() {
+                        // Il file esiste, verifica se contiene setup_completed
+                        if let Ok(content) = std::fs::read_to_string(&config_path) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Some(setup_completed) = json.get("setup_completed").and_then(|v| v.as_bool()) {
+                                    if setup_completed {
+                                        tracing::info!("Config file exists with setup_completed=true, skipping setup");
+                                        return Ok(());
+                                    } else {
+                                        tracing::warn!("Config file exists but setup_completed=false, this might indicate a corrupted config");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                should_show
             };
             
             if show_setup {
