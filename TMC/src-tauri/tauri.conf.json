@@ -1,6 +1,6 @@
 {
   "productName": "Tommy Memory Cleaner",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "identifier": "TommyMemoryCleaner",
   "build": {
     "beforeDevCommand": {
@@ -44,7 +44,7 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": [],
     "icon": [
       "icons/32x32.png",

@@ -1,10 +1,13 @@
 [package]
-name = "TMC"
-version = "0.3.2"
+name = "TommyMemoryCleaner"
+version = "0.4.0"
 edition = "2021"
 publish = false
 authors = ["tommy437"]
 description = "Advanced Memory Optimization Tool"
+
+# Windows resource file for version info
+build = "build.rs"
 
 [dependencies]
 # Image processing per tray icon
@@ -50,7 +53,7 @@ winrt-notification = "0.5"
 
 
 # Windows APIs
-windows-sys = { version = "=0.59.0", features = [
+windows-sys = { version = "0.52", features = [
   "Win32_Foundation",
   "Win32_Security",
   "Win32_System_Threading",
@@ -95,13 +98,9 @@ lto = true
 opt-level = "s"
 strip = true
 
-# Metadati Windows
 [package.metadata.winres]
 OriginalFilename = "TommyMemoryCleaner.exe"
 ProductName = "Tommy Memory Cleaner"
 CompanyName = "tommy437"
-FileDescription = "Advanced Memory Optimization Tool"
-LegalCopyright = "© 2025 tommy437"
-FileVersion = "1.0.0.0"
-ProductVersion = "1.0.0.0"
-IconPath = "icons/icon.ico"
+FileDescription = "Advanced Memory Optimization Tool for Windows"
+LegalCopyright = "© 2025 tommy437. All rights reserved."

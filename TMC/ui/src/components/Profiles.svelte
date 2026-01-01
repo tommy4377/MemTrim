@@ -45,23 +45,33 @@
     }
   }
   
-  // Traduci nomi delle aree
-  function getTranslatedAreaNames(profile: Profile): string {
-    const areas = areasForProfile(profile);
+  function handleDragStart(e: DragEvent) {
+    // Previene il drag dei pulsanti
+    e.preventDefault();
+  }
+  
+  function handleDragOver(e: DragEvent) {
+    // Previene il comportamento di default del drag
+    e.preventDefault();
+  }
+  
+  $: t_func = $t;
+  $: translatedAreaNames = (() => {
+    const areas = areasForProfile(selected);
     const areaNames: string[] = [];
     
     // Usa l'ordine e i nomi specifici per ogni area
-    if (areas & 128) areaNames.push($t('Working Set'));
-    if (areas & 4) areaNames.push($t('Modified Pages'));
-    if (areas & 16) areaNames.push($t('Standby List'));
-    if (areas & 32) areaNames.push($t('Low Priority Standby'));
-    if (areas & 64) areaNames.push($t('System Cache'));
-    if (areas & 1) areaNames.push($t('Combined Pages'));
-    if (areas & 2) areaNames.push($t('File Cache'));
-    if (areas & 8) areaNames.push($t('Registry Cache'));
+    if (areas & 128) areaNames.push(t_func('Working Set'));
+    if (areas & 4) areaNames.push(t_func('Modified Pages'));
+    if (areas & 16) areaNames.push(t_func('Standby List'));
+    if (areas & 32) areaNames.push(t_func('Low Priority Standby'));
+    if (areas & 64) areaNames.push(t_func('System Cache'));
+    if (areas & 1) areaNames.push(t_func('Combined Pages'));
+    if (areas & 2) areaNames.push(t_func('File Cache'));
+    if (areas & 8) areaNames.push(t_func('Registry Cache'));
     
     return areaNames.join(', ');
-  }
+  })();
   
 
 </script>
@@ -92,6 +102,10 @@
     transition: all 0.2s;
     position: relative;
     overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
   }
   
   /* Effetto shimmer per i bottoni dei profili quando sono attivi */
@@ -160,6 +174,8 @@
     <button 
       class:active={selected === 'Normal'} 
       on:click={() => selectProfile('Normal')}
+      on:dragstart={handleDragStart}
+      on:selectstart={handleDragStart}
       disabled={isChanging}
     >
       {$t('Normal')}
@@ -167,6 +183,8 @@
     <button 
       class:active={selected === 'Balanced'} 
       on:click={() => selectProfile('Balanced')}
+      on:dragstart={handleDragStart}
+      on:selectstart={handleDragStart}
       disabled={isChanging}
     >
       {$t('Balanced')}
@@ -174,6 +192,8 @@
     <button 
       class:active={selected === 'Gaming'} 
       on:click={() => selectProfile('Gaming')}
+      on:dragstart={handleDragStart}
+      on:selectstart={handleDragStart}
       disabled={isChanging}
     >
       {$t('Gaming')}
@@ -183,7 +203,7 @@
   <div class="info">
     <div class="info-title">{$t('Active areas')}:</div>
     <div class="areas-list">
-      {getTranslatedAreaNames(selected)}
-      </div>
+      {translatedAreaNames}
+    </div>
   </div>
 </div>
