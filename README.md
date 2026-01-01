@@ -1,10 +1,11 @@
-# Tommy Memory Cleaner v1.4.0
+# Tommy Memory Cleaner v2.0.0
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Multi-monitor tray placement
-- Desktop integration polish
+- Nine-language UI
+- Input validation
+- Rate limiting
 
 ## Requirements
 - Windows 10 or 11, 64-bit

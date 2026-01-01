@@ -45,7 +45,7 @@
   }
 
   async function onLangChange(code: string) {
-    setLanguage(code as 'en' | 'it');
+    await setLanguage(code as 'en' | 'it' | 'es' | 'fr' | 'pt' | 'de' | 'ar' | 'ja' | 'zh');
     await updateConfig({ language: code });
   }
 
@@ -104,25 +104,16 @@
     font-weight: 450;
   }
   
-  html[data-theme="dark"] label {
-    cursor: url('/cursors/dark/hand.cur'), pointer;
-  }
-  
   input[type="checkbox"] {
     width: 18px;
     height: 18px;
     cursor: url('/cursors/light/hand.cur'), pointer !important;
   }
   
-  html[data-theme="dark"] input[type="checkbox"] {
-    cursor: url('/cursors/dark/hand.cur'), pointer !important;
-  }
-  
   .select-row {
     font-size: 13px;
     font-weight: 450;
   }
-  
   .select-wrapper {
     min-width: 110px;
   }

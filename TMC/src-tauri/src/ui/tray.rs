@@ -270,7 +270,18 @@ pub fn update_tray_icon(app: &AppHandle, mem_percent: u8) {
     };
     
     let icon = create_tray_icon(mem_percent, bg, &tray_cfg.text_color_hex, tray_cfg.transparent_bg);
-    set_tray_icon(app, icon, &format!("RAM: {}%", mem_percent));
+    
+    // Try to get translated tooltip, fallback to English
+    let tooltip = {
+        match crate::commands::get_translation(&state.translations, "RAM: %d%") {
+            translated if translated != "RAM: %d%" => {
+                translated.replace("%d%", &mem_percent.to_string())
+            }
+            _ => format!("RAM: {}%", mem_percent)
+        }
+    };
+    
+    set_tray_icon(app, icon, &tooltip);
 }
 
 /// Forza refresh dell'icona (chiamato quando cambia la config)
@@ -293,6 +304,8 @@ pub fn refresh_tray_icon(app: &AppHandle) {
 
 pub fn start_tray_updater(app: AppHandle, engine: Engine) {
     tauri::async_runtime::spawn(async move {
+        let mut last_percent: f32 = -1.0; // Inizializza a valore impossibile
+        
         loop {
             // FIX #12: Clona la configurazione del tray PRIMA di chiamare memory() per evitare race conditions
             // Questo assicura che anche se la config cambia durante l'esecuzione, usiamo valori consistenti
@@ -323,11 +336,19 @@ pub fn start_tray_updater(app: AppHandle, engine: Engine) {
                 }
             }
             
-            // Ora ottieni la memoria e aggiorna l'icona
+            // Ora ottieni la memoria e aggiorna l'icona solo se cambia significativamente
             if let Ok(mem) = engine.memory() {
                 // Clamp percentage tra 0-100 (dovrebbe essere già nel range, ma per sicurezza)
-                let p = mem.physical.used.percentage.min(100);
-                update_tray_icon(&app, p);
+                let current_percent = mem.physical.used.percentage.min(100) as f32;
+                
+                // Aggiorna solo se la variazione è > 1% o è il primo ciclo
+                if last_percent < 0.0 || (current_percent - last_percent).abs() > 1.0 {
+                    update_tray_icon(&app, current_percent as u8);
+                    last_percent = current_percent;
+                    tracing::debug!("Tray icon updated: {:.1}% (change > 1%)", current_percent);
+                } else {
+                    tracing::debug!("Skipping tray update: {:.1}% (change < 1%)", current_percent);
+                }
             }
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }

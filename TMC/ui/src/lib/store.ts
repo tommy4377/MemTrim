@@ -1,9 +1,10 @@
 import { writable, get } from 'svelte/store';
 import type { Config, MemoryInfo, Profile } from './types';
-import { getConfig, saveConfig, memoryInfo } from './api';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { setLanguage, type Language } from '../i18n/index';
-import { areasForProfile } from './profiles';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { setLanguage } from '../i18n/index';
+import { cacheTranslationsInBackend } from '../lib/translations';
+import { areasForProfile } from '../lib/profiles';
+import type { Language } from '../i18n/index';
 
 // ========== TYPES ==========
 interface ProgressState {
@@ -100,6 +101,7 @@ export async function initApp(): Promise<void> {
     await cleanupApp();
     
     // Load configuration
+    const { getConfig } = await import('./api');
     const cfg = await getConfig();
     
     // Validate and fix configuration
@@ -112,11 +114,15 @@ export async function initApp(): Promise<void> {
       if (validLang !== cfg.language) {
         cfg.language = validLang;
         // Save corrected language
+        const { saveConfig } = await import('./api');
         await saveConfig({ language: validLang }).catch(() => {});
       }
       
       // Set language in UI
-      setLanguage(validLang);
+      await setLanguage(validLang);
+      
+      // Cache translations in backend for notifications
+      await cacheTranslationsInBackend();
       
       // Set theme
       const theme = cfg.theme === 'light' ? 'light' : 'dark';
@@ -157,6 +163,7 @@ export async function initApp(): Promise<void> {
     
     // Load initial memory info
     try {
+      const { memoryInfo } = await import('./api');
       const mem = await memoryInfo();
       memory.set(mem);
     } catch (error) {
@@ -218,6 +225,7 @@ async function setupEventListeners(): Promise<void> {
     // Optimize now listener
     appState.listeners.optimizeNow = await listen('tmc://optimize_now', async () => {
       try {
+        const { getConfig } = await import('./api');
         const currentCfg = await getConfig();
         if (currentCfg) {
           const { optimizeAsync } = await import('./api');
@@ -280,6 +288,7 @@ export async function updateConfig(
   
   try {
     // Save to backend PRIMA di aggiornare lo store
+    const { saveConfig } = await import('./api');
     await saveConfig(partial);
     
     // Solo dopo il salvataggio riuscito, aggiorna lo store
@@ -290,7 +299,7 @@ export async function updateConfig(
     // Language change
     if (partial.language !== undefined) {
       const validLang = getSafeLanguage(partial.language);
-      setLanguage(validLang);
+      await setLanguage(validLang);
       
       // If language was corrected, save it
       if (validLang !== partial.language) {
@@ -374,6 +383,7 @@ export async function updateConfig(
     
     // Try to reload from backend
     try {
+      const { getConfig } = await import('./api');
       const freshConfig = await getConfig();
       config.set(freshConfig);
     } catch (reloadError) {
@@ -405,13 +415,38 @@ function getProfilePriority(profile: Profile): 'Low' | 'Normal' | 'High' {
 }
 
 // ========== MEMORY REFRESH ==========
+
+const MEMORY_REFRESH_CRITICAL = 500; // 0.5 seconds when memory is critical
+const MEMORY_REFRESH_NORMAL = 2000; // 2 seconds when memory is normal
+const MEMORY_REFRESH_LOW = 1000; // 1 second when memory is low
+const LOW_MEMORY_THRESHOLD = 80; // 80%
+const CRITICAL_MEMORY_THRESHOLD = 90; // 90%
+
 export function startMemoryRefresh(intervalMs: number = MEMORY_REFRESH_INTERVAL): void {
   stopMemoryRefresh();
   
   const refresh = async () => {
     try {
+      const { memoryInfo } = await import('./api');
       const mem = await memoryInfo();
       memory.set(mem);
+      
+      // Adaptive refresh: adjust interval based on memory usage
+      const usagePercent = mem.physical.used.percentage;
+      let newInterval = intervalMs;
+      
+      if (usagePercent >= CRITICAL_MEMORY_THRESHOLD) {
+        newInterval = MEMORY_REFRESH_CRITICAL;
+      } else if (usagePercent >= LOW_MEMORY_THRESHOLD) {
+        newInterval = MEMORY_REFRESH_LOW;
+      }
+      
+      // Restart with new interval if changed
+      if (newInterval !== intervalMs) {
+        stopMemoryRefresh();
+        appState.refreshInterval = window.setInterval(refresh, newInterval);
+        console.debug(`Adaptive refresh: ${newInterval}ms (memory: ${usagePercent.toFixed(1)}%)`);
+      }
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('Failed to refresh memory info:', error);
@@ -435,6 +470,7 @@ export function stopMemoryRefresh(): void {
 
 export async function refreshMemoryOnce(): Promise<void> {
   try {
+    const { memoryInfo } = await import('./api');
     const mem = await memoryInfo();
     memory.set(mem);
   } catch (error) {
