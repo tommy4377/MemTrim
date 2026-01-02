@@ -1,11 +1,10 @@
-# Tommy Memory Cleaner v0.5.1
+# Tommy Memory Cleaner v0.5.2
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Advanced memory paths
-- Compatibility fallbacks
-- Safety improvements
+- Responsive accent picker
+- Reduced UI overhead
 
 ## Requirements
 - Windows 10 or 11, 64-bit
