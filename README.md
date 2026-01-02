@@ -1,11 +1,10 @@
-# Tommy Memory Cleaner v2.0.0
+# Tommy Memory Cleaner v2.1.0
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Nine-language UI
-- Input validation
-- Rate limiting
+- Reliable GUI and CLI dual mode
+- Console attachment fixes
 
 ## Requirements
 - Windows 10 or 11, 64-bit
