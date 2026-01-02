@@ -14,27 +14,10 @@
         html, body {
             margin: 0;
             padding: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 160px;
+            height: 120px;
             overflow: hidden;
             background: transparent;
-        }
-        
-        /* Overlay trasparente per catturare click fuori dal menu */
-        .click-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: transparent;
-            z-index: 1;
-            pointer-events: auto;
-            display: none;
-        }
-        
-        body.menu-open .click-overlay {
-            display: block;
         }
 
         body {
@@ -47,7 +30,7 @@
         }
 
         .menu-container {
-            position: fixed;
+            position: absolute;
             display: flex;
             flex-direction: column;
             width: 160px;
@@ -57,6 +40,9 @@
             overflow: hidden;
             pointer-events: auto !important;
             z-index: 1000;
+            top: 0;
+            left: 0;
+            cursor: default;
         }
 
         body[data-theme="light"] .menu-container {
@@ -117,13 +103,10 @@
     </style>
 </head>
 <body>
-    <!-- Overlay trasparente per catturare click fuori dal menu -->
-    <div class="click-overlay" id="click-overlay"></div>
-    
     <div class="menu-container">
-        <button class="menu-item" data-action="open" data-i18n="dashboard">Dashboard</button>
-        <button class="menu-item" data-action="optimize" data-i18n="optimize">Ottimizza</button>
-        <button class="menu-item danger" data-action="exit" data-i18n="exit">Esci</button>
+        <button class="menu-item" data-action="open" data-i18n="Open TMC">Open TMC</button>
+        <button class="menu-item" data-action="optimize" data-i18n="Optimize Memory">Optimize Memory</button>
+        <button class="menu-item danger" data-action="exit" data-i18n="Exit">Exit</button>
     </div>
 
     <script type="module" src="/src/tray.ts"></script>

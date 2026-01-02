@@ -1,6 +1,6 @@
 [package]
 name = "TommyMemoryCleaner"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 publish = false
 authors = ["tommy437"]
@@ -70,6 +70,7 @@ windows-sys = { version = "0.52", features = [
   "Win32_System_Registry",
   "Win32_System_EventLog",
   "Win32_System_LibraryLoader",
+  "Win32_System_Console",
 ] }
 
 # NT API
@@ -86,6 +87,9 @@ tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 winres = "0.1"
+
+[dev-dependencies]
+# Dev dependencies for linting and testing
 
 [features]
 default = ["custom-protocol"]

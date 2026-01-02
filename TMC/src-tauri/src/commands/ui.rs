@@ -1,13 +1,42 @@
-use tauri::{AppHandle, State, Manager};
+/// UI-related commands for window management and notifications.
+///
+/// This module provides Tauri commands for showing windows,
+/// displaying notifications, and positioning UI elements.
+use tauri::{AppHandle, Manager, State};
 
+/// Shows the main window or creates it if it doesn't exist.
+///
+/// This command delegates to the helper function to handle both
+/// showing existing windows and creating new ones if needed.
 #[tauri::command]
 pub fn cmd_show_or_create_window(app: AppHandle) {
     crate::show_or_create_window(&app);
 }
 
+/// Displays a system notification with the specified title and message.
+///
+/// Uses the current theme from configuration to style the notification.
+/// Falls back to dark theme if configuration is unavailable.
+///
+/// # Arguments
+///
+/// * `app` - The application handle for displaying notifications
+/// * `title` - The notification title
+/// * `message` - The notification message
+/// * `state` - The application state containing the configuration
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the notification is displayed successfully,
+/// or an error string if the operation fails.
 #[tauri::command]
-pub fn cmd_show_notification(app: AppHandle, title: String, message: String, state: State<'_, crate::AppState>) -> Result<(), String> {
-    // Ottieni il tema corrente dalla configurazione
+pub fn cmd_show_notification(
+    app: AppHandle,
+    title: String,
+    message: String,
+    state: State<'_, crate::AppState>,
+) -> Result<(), String> {
+    // Get the current theme from configuration
     let theme = {
         match state.cfg.try_lock() {
             Ok(cfg_guard) => cfg_guard.theme.clone(),
@@ -17,14 +46,17 @@ pub fn cmd_show_notification(app: AppHandle, title: String, message: String, sta
             }
         }
     };
-    // Usa la funzione del modulo notifications
+    // Use the notifications module function
     crate::notifications::show_windows_notification(&app, &title, &message, &theme)
 }
 
-// Helper functions that need to be accessible from main.rs
+/// Helper function to show or create the main application window.
+///
+/// This function is accessible from main.rs and handles both
+/// showing existing windows and creating new ones if needed.
 pub fn show_or_create_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _: Result<(), _> = window.set_skip_taskbar(false);  // Mostra nella taskbar
+        let _: Result<(), _> = window.set_skip_taskbar(false); // Show in taskbar
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -39,12 +71,12 @@ pub fn show_or_create_window(app: &AppHandle) {
         .title("Tommy Memory Cleaner")
         .inner_size(480.0, 680.0)
         .resizable(false)
-        .shadow(true)  // Abilita shadow per bordi arrotondati
+        .shadow(true)  // Enable shadow for rounded corners
         .center()
-        .skip_taskbar(false)  // Mostra nella taskbar
-        .visible(true)  // Assicurati che sia visibile
+        .skip_taskbar(false)  // Show in taskbar
+        .visible(true)  // Ensure window is visible
         .build();
-    
+
         match result {
             Ok(window) => {
                 tracing::info!("Window created successfully");
@@ -62,8 +94,16 @@ pub fn show_or_create_window(app: &AppHandle) {
     }
 }
 
+/// Positions the tray menu relative to the system tray icon.
+///
+/// This function calculates the optimal position for the tray menu
+/// based on the cursor position and taskbar location.
+///
+/// # Arguments
+///
+/// * `window` - The tray menu window to position
 pub fn position_tray_menu(window: &tauri::WebviewWindow) {
-    // Ottieni le dimensioni del menu
+    // Get the menu dimensions
     let menu_size = match window.outer_size() {
         Ok(size) => size,
         Err(e) => {
@@ -71,16 +111,16 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
             return;
         }
     };
-    
+
     let menu_width = menu_size.width as i32;
     let menu_height = menu_size.height as i32;
-    
-    // ⭐ FIX: Ottieni PRIMA la posizione del cursore (vicino alla tray icon)
+
+    // FIX: Get cursor position FIRST (near tray icon)
     let cursor_pos = match window.cursor_position() {
         Ok(pos) => pos,
         Err(_) => {
             tracing::error!("Failed to get cursor position");
-            // Fallback: usa il monitor primario
+            // Fallback: use primary monitor
             if let Ok(Some(monitor)) = window.primary_monitor() {
                 let monitor_size = monitor.size();
                 let monitor_pos = monitor.position();
@@ -96,40 +136,48 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
             }
         }
     };
-    
-    // ⭐ FIX: Trova il monitor che contiene il cursore (non quello della finestra)
+
+    // FIX: Find monitor containing cursor (not the window's monitor)
     let cursor_x = cursor_pos.x as i32;
     let cursor_y = cursor_pos.y as i32;
-    
-    // Ottieni tutti i monitor disponibili e trova quello che contiene il cursore
+
+    // Get all available monitors and find the one containing the cursor
     let monitor = match window.available_monitors() {
         Ok(monitors) => {
-            // Trova il monitor che contiene il cursore
+            // Find monitor containing the cursor
             let mut found_monitor = None;
             for m in monitors {
                 let m_pos = m.position();
                 let m_size = m.size();
-                
+
                 let m_left = m_pos.x;
                 let m_top = m_pos.y;
                 let m_right = m_pos.x + m_size.width as i32;
                 let m_bottom = m_pos.y + m_size.height as i32;
-                
-                // Verifica se il cursore è dentro questo monitor
-                if cursor_x >= m_left && cursor_x < m_right && 
-                   cursor_y >= m_top && cursor_y < m_bottom {
-                    // Log prima di spostare m
-                    tracing::debug!("Found monitor containing cursor: {}x{} at {:?}", 
-                        m_size.width, m_size.height, m_pos);
+
+                // Check if cursor is inside this monitor
+                if cursor_x >= m_left
+                    && cursor_x < m_right
+                    && cursor_y >= m_top
+                    && cursor_y < m_bottom
+                {
+                    // Log before moving m
+                    tracing::debug!(
+                        "Found monitor containing cursor: {}x{} at {:?}",
+                        m_size.width,
+                        m_size.height,
+                        m_pos
+                    );
                     found_monitor = Some(m);
                     break;
                 }
             }
-            
-            // Se non trovato, usa il monitor primario come fallback
+
+            // If not found, use primary monitor as fallback
             found_monitor.unwrap_or_else(|| {
                 tracing::warn!("Cursor not found in any monitor, using primary monitor");
-                window.primary_monitor()
+                window
+                    .primary_monitor()
                     .ok()
                     .flatten()
                     .expect("No primary monitor available")
@@ -137,11 +185,13 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
         }
         Err(e) => {
             tracing::error!("Failed to get available monitors: {:?}", e);
-            // Fallback: usa current_monitor o primary_monitor direttamente
-            match window.current_monitor()
+            // Fallback: use current_monitor or primary_monitor directly
+            match window
+                .current_monitor()
                 .ok()
                 .flatten()
-                .or_else(|| window.primary_monitor().ok().flatten()) {
+                .or_else(|| window.primary_monitor().ok().flatten())
+            {
                 Some(m) => {
                     tracing::warn!("Using fallback monitor (current or primary)");
                     m
@@ -153,68 +203,86 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
             }
         }
     };
-    
+
     let monitor_size = monitor.size();
     let monitor_pos = monitor.position();
-    
-    tracing::debug!("Cursor position: {:?}, Using monitor: {}x{} at {:?}", 
-        cursor_pos, monitor_size.width, monitor_size.height, monitor_pos);
-    
-    // Determina la posizione della taskbar
-    let (final_x, final_y) = if let Some((taskbar_left, taskbar_top, taskbar_right, taskbar_bottom)) = get_taskbar_rect() {
+
+    tracing::debug!(
+        "Cursor position: {:?}, Using monitor: {}x{} at {:?}",
+        cursor_pos,
+        monitor_size.width,
+        monitor_size.height,
+        monitor_pos
+    );
+
+    // Determine taskbar position
+    let (final_x, final_y) = if let Some((
+        taskbar_left,
+        taskbar_top,
+        taskbar_right,
+        taskbar_bottom,
+    )) = get_taskbar_rect()
+    {
         let taskbar_height = taskbar_bottom - taskbar_top;
         let taskbar_width = taskbar_right - taskbar_left;
         let is_taskbar_vertical = taskbar_width < taskbar_height;
-        
-        tracing::debug!("Taskbar rect: ({}, {}, {}, {}), vertical: {}", 
-            taskbar_left, taskbar_top, taskbar_right, taskbar_bottom, is_taskbar_vertical);
-        
+
+        tracing::debug!(
+            "Taskbar rect: ({}, {}, {}, {}), vertical: {}",
+            taskbar_left,
+            taskbar_top,
+            taskbar_right,
+            taskbar_bottom,
+            is_taskbar_vertical
+        );
+
         let cursor_x = cursor_pos.x as i32;
         let cursor_y = cursor_pos.y as i32;
-        
+
         if is_taskbar_vertical {
-            // Taskbar verticale (sinistra o destra)
+            // Vertical taskbar (left or right)
             if taskbar_left < monitor_pos.x + 100 {
-                // Taskbar a SINISTRA - menu a destra della tray
+                // Taskbar on LEFT - menu to the right of tray
                 let x = taskbar_right + 5;
                 let y = (cursor_y - menu_height / 2).max(monitor_pos.y + 5);
                 (x, y)
             } else {
-                // Taskbar a DESTRA - menu a sinistra della tray
+                // Taskbar on RIGHT - menu to the left of tray
                 let x = (taskbar_left - menu_width - 5).max(monitor_pos.x + 5);
                 let y = (cursor_y - menu_height / 2).max(monitor_pos.y + 5);
                 (x, y)
             }
         } else {
-            // Taskbar orizzontale (alto o basso)
-            // Centra il menu orizzontalmente rispetto al cursore
+            // Horizontal taskbar (top or bottom)
+            // Center menu horizontally relative to cursor
             let x = (cursor_x - menu_width / 2)
-                .max(monitor_pos.x + 5)  // Non troppo a sinistra
-                .min(monitor_pos.x + monitor_size.width as i32 - menu_width - 5);  // Non troppo a destra
-            
+                .max(monitor_pos.x + 5)  // Not too far left
+                .min(monitor_pos.x + monitor_size.width as i32 - menu_width - 5); // Not too far right
+
             if taskbar_top < monitor_pos.y + 100 {
-                // Taskbar in ALTO - menu SOTTO la taskbar
+                // Taskbar on TOP - menu BELOW taskbar
                 let y = taskbar_bottom + 5;
                 (x, y)
             } else {
-                // Taskbar in BASSO - menu SOPRA la taskbar
+                // Taskbar on BOTTOM - menu ABOVE taskbar
                 let y = taskbar_top - menu_height - 5;
                 (x, y)
             }
         }
     } else {
-        // Fallback: nessuna info taskbar, usa posizione sicura
+        // Fallback: no taskbar info, use safe position
         tracing::warn!("Could not get taskbar rect, using fallback positioning");
         let x = (cursor_pos.x as i32 - menu_width / 2)
             .max(monitor_pos.x + 5)
             .min(monitor_pos.x + monitor_size.width as i32 - menu_width - 5);
-        let y = (monitor_pos.y + monitor_size.height as i32 - menu_height - 80).max(monitor_pos.y + 5);
+        let y =
+            (monitor_pos.y + monitor_size.height as i32 - menu_height - 80).max(monitor_pos.y + 5);
         (x, y)
     };
-    
+
     tracing::info!("Positioning tray menu at: ({}, {})", final_x, final_y);
-    
-    // Applica la posizione
+
+    // Apply the position
     if let Err(e) = window.set_position(tauri::PhysicalPosition {
         x: final_x,
         y: final_y,
@@ -223,15 +291,19 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Retrieves the Windows taskbar rectangle coordinates.
+///
+/// Returns (left, top, right, bottom) of the taskbar area.
+/// Only available on Windows.
 #[cfg(windows)]
 pub fn get_taskbar_rect() -> Option<(i32, i32, i32, i32)> {
-    use windows_sys::Win32::UI::Shell::{SHAppBarMessage, ABM_GETTASKBARPOS, APPBARDATA};
     use std::mem::zeroed;
-    
+    use windows_sys::Win32::UI::Shell::{SHAppBarMessage, ABM_GETTASKBARPOS, APPBARDATA};
+
     unsafe {
         let mut app_bar_data: APPBARDATA = zeroed();
         app_bar_data.cbSize = std::mem::size_of::<APPBARDATA>() as u32;
-        
+
         let result = SHAppBarMessage(ABM_GETTASKBARPOS, &mut app_bar_data);
         if result != 0 {
             let rc = app_bar_data.rc;
@@ -242,6 +314,7 @@ pub fn get_taskbar_rect() -> Option<(i32, i32, i32, i32)> {
     }
 }
 
+/// Stub implementation for non-Windows platforms.
 #[cfg(not(windows))]
 fn get_taskbar_rect() -> Option<(i32, i32, i32, i32)> {
     None
