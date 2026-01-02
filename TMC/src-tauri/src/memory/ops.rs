@@ -21,7 +21,7 @@
 use crate::memory::privileges::ensure_privileges;
 use crate::memory::types::{mk_stats, MemoryInfo};
 use anyhow::{bail, Result};
-use std::{ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt, ptr::null_mut};
+use std::{ffi::OsString, mem, os::windows::ffi::OsStringExt, ptr};
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE, INVALID_HANDLE_VALUE};
@@ -39,14 +39,10 @@ use std::collections::HashSet;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
-const SYS_MEMORY_LIST_INFORMATION: u32 = 80;
-const SYS_REGISTRY_RECONCILIATION_INFORMATION: u32 = 155;
-const SYS_COMBINE_PHYSICAL_MEMORY_INFORMATION: u32 = 130;
+pub const SYS_MEMORY_LIST_INFORMATION: u32 = 80;
+const SYS_COMBINE_PHYSICAL_MEMORY_INFORMATION: u32 = 101;
 
 const MEM_EMPTY_WORKING_SETS: u32 = 2;
-const MEM_FLUSH_MODIFIED_LIST: u32 = 3;
-const MEM_PURGE_STANDBY_LIST: u32 = 4;
-const MEM_PURGE_LOW_PRI_STANDBY_LIST: u32 = 5;
 
 const SE_DEBUG_NAME: &str = "SeDebugPrivilege";
 const SE_INC_QUOTA_NAME: &str = "SeIncreaseQuotaPrivilege";
@@ -102,7 +98,7 @@ pub fn memory_info() -> Result<MemoryInfo> {
 }
 
 /// Make NT system call with u32 command
-fn nt_call_u32(class: u32, command: u32) -> Result<()> {
+pub fn nt_call_u32(class: u32, command: u32) -> Result<()> {
     // FIX: Retry logic for antivirus compatibility
     const MAX_RETRIES: u32 = 3;
     let mut last_error = 0i32;
@@ -163,37 +159,91 @@ fn nt_call_u32(class: u32, command: u32) -> Result<()> {
 
 pub fn optimize_standby_list(low_priority: bool) -> Result<()> {
     ensure_privileges(&[SE_PROFILE_SINGLE_PROCESS_NAME])?;
-    let cmd = if low_priority {
-        MEM_PURGE_LOW_PRI_STANDBY_LIST
-    } else {
-        MEM_PURGE_STANDBY_LIST
-    };
-
-    // Usa safe_memory_operation per evitare rilevamenti antivirus
+    
+    // Use the original implementation to avoid recursion
     crate::antivirus::whitelist::safe_memory_operation(|| {
-        nt_call_u32(SYS_MEMORY_LIST_INFORMATION, cmd)
+        // Try advanced function first, then fallback to standard
+        if low_priority {
+            match crate::memory::advanced::purge_standby_list_low_priority() {
+                Ok(_) => {
+                    tracing::info!("✓ Advanced low priority standby list purge successful");
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::warn!("⚠ Advanced low priority standby purge failed ({}), using standard API", e);
+                    let cmd = MEM_EMPTY_WORKING_SETS + 1; // Different command for low priority
+                    let result = nt_call_u32(SYS_MEMORY_LIST_INFORMATION, cmd);
+                    match &result {
+                        Ok(_) => tracing::info!("✓ Standard low priority standby list optimization successful"),
+                        Err(e) => tracing::warn!("Low priority standby list optimization failed: {:?}", e),
+                    }
+                    result
+                }
+            }
+        } else {
+            match crate::memory::advanced::purge_standby_list() {
+                Ok(_) => {
+                    tracing::info!("✓ Advanced standby list purge successful");
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::warn!("⚠ Advanced standby purge failed ({}), using standard API", e);
+                    let cmd = MEM_EMPTY_WORKING_SETS;
+                    let result = nt_call_u32(SYS_MEMORY_LIST_INFORMATION, cmd);
+                    match &result {
+                        Ok(_) => tracing::info!("✓ Standard standby list optimization successful"),
+                        Err(e) => tracing::warn!("Standby list optimization failed: {:?}", e),
+                    }
+                    result
+                }
+            }
+        }
     })
 }
 
 pub fn optimize_modified_page_list() -> Result<()> {
     ensure_privileges(&[SE_PROFILE_SINGLE_PROCESS_NAME])?;
+    
+    // Use the original implementation to avoid recursion
     crate::antivirus::whitelist::safe_memory_operation(|| {
-        nt_call_u32(SYS_MEMORY_LIST_INFORMATION, MEM_FLUSH_MODIFIED_LIST)
+        // Try advanced aggressive flush first
+        match crate::memory::advanced::aggressive_modified_page_flush() {
+            Ok(_) => {
+                tracing::info!("✓ Advanced modified page list flush successful");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("⚠ Advanced modified page flush failed ({}), using standard API", e);
+                nt_call_u32(SYS_MEMORY_LIST_INFORMATION, 3) // MEM_FLUSH_MODIFIED_LIST equivalent
+            }
+        }
     })
 }
 
 pub fn optimize_registry_cache() -> Result<()> {
-    crate::antivirus::whitelist::safe_memory_operation(|| -> Result<(), anyhow::Error> {
-        unsafe {
-            let status =
-                NtSetSystemInformation(SYS_REGISTRY_RECONCILIATION_INFORMATION, null_mut(), 0);
-            if status < 0 {
-                tracing::warn!("Registry cache optimization not available: 0x{:x}", status);
-                // Non far crashare
-                return Ok(());
+    // Use the original implementation to avoid recursion
+    crate::antivirus::whitelist::safe_memory_operation(|| {
+        // Try advanced registry optimization first
+        match crate::memory::advanced::optimize_registry_cache() {
+            Ok(_) => {
+                tracing::info!("✓ Advanced registry optimization successful");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("⚠ Advanced registry optimization failed ({}), using standard API", e);
+                unsafe {
+                    let status = ntapi::ntexapi::NtSetSystemInformation(
+                        155, // SYS_REGISTRY_RECONCILIATION_INFORMATION
+                        ptr::null_mut(),
+                        0,
+                    );
+                    if status < 0 {
+                        tracing::warn!("Registry cache optimization not available: 0x{:x}", status);
+                    }
+                    Ok(())
+                }
             }
         }
-        Ok(())
     })
 }
 
@@ -299,7 +349,7 @@ fn empty_ws_process(pid: u32) -> bool {
             let h: HANDLE = OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, 0, pid);
 
             // HANDLE in windows-sys is isize, so compare with 0
-            if h == 0 {
+            if h.is_null() {
                 let error = GetLastError();
                 // ERROR_ACCESS_DENIED (0x5) is common if SE_DEBUG_NAME is not acquired
                 if error == 5 {
@@ -351,6 +401,9 @@ pub fn optimize_working_set(exclusions_lower: &[String]) -> Result<()> {
     // Even if we use the global method, SE_DEBUG_NAME ensures it works on all processes
     ensure_privileges(&[SE_DEBUG_NAME, SE_PROFILE_SINGLE_PROCESS_NAME])?;
 
+    // Get foreground window PID to exclude it (prevents FPS drops in games)
+    let foreground_pid = get_foreground_process_pid();
+
     // If there are no custom exclusions, use fast global optimization
     // This method requires SE_DEBUG_NAME to work correctly on system processes
     if exclusions_lower.is_empty() {
@@ -366,9 +419,17 @@ pub fn optimize_working_set(exclusions_lower: &[String]) -> Result<()> {
     let mut success_count = 0;
     let mut skip_count = 0;
     let mut critical_skip = 0;
+    let mut foreground_skip = 0;
 
     for (pid, name) in processes {
-        // FIRST check if it's a critical process
+        // FIRST check if it's the foreground process
+        if Some(pid) == foreground_pid {
+            tracing::debug!("Skipping foreground process {} (PID: {})", name, pid);
+            foreground_skip += 1;
+            continue;
+        }
+
+        // THEN check if it's a critical process
         if is_critical_process(&name) {
             critical_skip += 1;
             continue;
@@ -386,10 +447,11 @@ pub fn optimize_working_set(exclusions_lower: &[String]) -> Result<()> {
     }
 
     tracing::debug!(
-        "Working set optimization: {} cleaned, {} user excluded, {} critical protected",
+        "Working set optimization: {} cleaned, {} user excluded, {} critical protected, {} foreground protected",
         success_count,
         skip_count,
-        critical_skip
+        critical_skip,
+        foreground_skip
     );
 
     Ok(())
@@ -422,21 +484,55 @@ pub fn optimize_combined_page_list() -> Result<()> {
 
             let status = NtSetSystemInformation(
                 SYS_COMBINE_PHYSICAL_MEMORY_INFORMATION,
-                (&mut info as *mut MEMORY_COMBINE_INFORMATION_EX) as _,
-                std::mem::size_of::<MEMORY_COMBINE_INFORMATION_EX>() as u32,
+                &mut info as *mut _ as _,
+                mem::size_of::<MEMORY_COMBINE_INFORMATION_EX>() as u32,
             );
 
             if status < 0 {
-                // Non far crashare, solo log warning e continua
+                // Check for Windows 11 24H2+ compatibility issue
+                if status as u32 == 0xC0000003 {
+                    // STATUS_INVALID_INFO_CLASS - Windows 11 24H2+ changed the API
+                    tracing::debug!(
+                        "Combined page list not supported on Windows 11 24H2+ (STATUS_INVALID_INFO_CLASS). \
+                        This is expected and not an error."
+                    );
+                    return Ok(());
+                }
+                
                 tracing::warn!(
-                    "Combined page list optimization not available on this system (0x{:x})",
+                    "Combined page list optimization failed: 0x{:x} (this may be normal on newer Windows versions)",
                     status
                 );
-                return Ok(());
+                return Ok(()); // Don't fail the entire optimization
             }
+
+            tracing::info!("Combined {} pages", info.pages_combined);
         }
+
         Ok(())
     })
+}
+
+/// Get the PID of the foreground window process
+#[cfg(target_os = "windows")]
+fn get_foreground_process_pid() -> Option<u32> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return None;
+        }
+        
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        Some(pid)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_foreground_process_pid() -> Option<u32> {
+    None
 }
 
 pub fn list_process_names() -> Vec<String> {

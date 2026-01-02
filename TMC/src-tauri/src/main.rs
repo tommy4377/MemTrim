@@ -409,6 +409,12 @@ async fn perform_optimization(
                     .replace("%.1f", &format!("{:.1}", freed_mb.abs()))
                     .replace("%.2f", &format!("{:.2}", free_gb))
                     .replace("%s", &profile_name);
+
+                // Emit event to frontend for memory stats tracking
+                let event_result = app.emit("optimization-completed", serde_json::json!({
+                    "freed_physical_mb": freed_mb.abs()
+                }));
+                tracing::debug!("Emitted optimization-completed event with {} MB freed, result: {:?}", freed_mb.abs(), event_result);
                 // Get current theme from configuration
                 let theme = {
                     let state = app.state::<AppState>();
@@ -829,6 +835,12 @@ fn main() {
 
         tracing::info!("Admin privileges confirmed - application running with elevated privileges");
     }
+    
+    // Initialize advanced optimization features
+    tracing::warn!("Initializing advanced optimization features");
+    if let Err(e) = crate::memory::advanced::init_advanced_features() {
+        tracing::warn!("Failed to initialize advanced features: {}", e);
+    }
 
     // Initialize privileges at startup with retry
     // IMPORTANT: Privileges must be acquired BEFORE first optimization
@@ -933,6 +945,9 @@ fn main() {
             commands::memory::cmd_list_process_names,
             commands::memory::cmd_get_critical_processes,
             commands::memory::cmd_optimize_async,
+            // Commands from memory_stats module
+            commands::memory_stats::get_memory_stats,
+            commands::memory_stats::save_memory_stats,
             // Commands from system module
             commands::system::cmd_run_on_startup,
             commands::system::cmd_set_always_on_top,

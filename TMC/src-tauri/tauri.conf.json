@@ -1,6 +1,6 @@
 {
   "productName": "Tommy Memory Cleaner",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "TommyMemoryCleaner",
   "build": {
     "beforeDevCommand": {
@@ -19,12 +19,12 @@
       {
         "label": "main",
         "title": "Tommy Memory Cleaner",
-        "width": 480,
-        "height": 680,
-        "minWidth": 380,
-        "minHeight": 90,
-        "maxWidth": 480,
-        "maxHeight": 680,
+        "width": 490,
+        "height": 690,
+        "minWidth": 390,
+        "minHeight": 190,
+        "maxWidth": 490,
+        "maxHeight": 690,
         "resizable": false,
         "decorations": false,
         "transparent": true,
