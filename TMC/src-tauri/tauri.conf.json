@@ -1,6 +1,6 @@
 {
   "productName": "Tommy Memory Cleaner",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "identifier": "TommyMemoryCleaner",
   "build": {
     "beforeDevCommand": {
