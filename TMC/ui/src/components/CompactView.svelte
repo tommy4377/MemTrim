@@ -13,10 +13,15 @@
   let memUnsub: (() => void) | null = null;
   let cfgUnsub: (() => void) | null = null;
   let progUnsub: (() => void) | null = null;
+  let isWindows10 = false;
 
   onMount(() => {
     memUnsub = memory.subscribe((v) => (memInfo = v));
-    cfgUnsub = config.subscribe((v) => (cfg = v));
+    cfgUnsub = config.subscribe((v) => {
+      cfg = v;
+      // Usa la configurazione salvata per determinare se siamo su Windows 10
+      isWindows10 = v?.is_windows_10 ?? false;
+    });
     // FIX: Usa lo store progress invece di una variabile locale per mantenere lo stato durante il cambio di vista
     progUnsub = progress.subscribe((v) => (prog = v));
   });
@@ -59,14 +64,22 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    height: calc(100% - 36px);
+    height: 100%;
+    background: var(--bg);
+    border-radius: inherit;
+    overflow: hidden;
+  }
+  
+  /* Applica border-radius solo su Windows 10 */
+  .compact.windows-10 {
+    border-radius: var(--window-border-radius, 16px);
   }
   
   .bar {
     flex: 1;
-    height: 28px;
+    height: 30px;
     background: var(--bar-track);
-    border-radius: 14px;
+    border-radius: 15px;
     position: relative;
     overflow: hidden;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
@@ -79,7 +92,7 @@
     bottom: 0;
     background: var(--bar-fill);
     transition: width 0.3s ease, background 0.3s ease;
-    border-radius: 14px;
+    border-radius: 15px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -97,7 +110,7 @@
   .percent {
     color: white;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 14px;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     position: absolute;
     left: 50%;
@@ -108,14 +121,14 @@
     background: var(--btn-bg);
     color: white;
     border: none;
-    padding: 8px 20px;
-    border-radius: 14px;
-    cursor: pointer;
+    padding: 8px 22px;
+    border-radius: 15px;
+    cursor: url('/cursors/light/hand.cur'), pointer;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 14px;
     min-width: fit-content;
     width: auto;
-    height: 28px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -125,6 +138,12 @@
     overflow: hidden;
     white-space: nowrap;
     text-align: center;
+    line-height: 1;
+  }
+  
+  /* Disabled cursor */
+  button:disabled {
+    cursor: url('/cursors/light/no.cur'), not-allowed;
   }
   
   /* Effetto shimmer per il bottone optimize */
@@ -138,7 +157,7 @@
     background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
     animation: shimmer 2s infinite;
     pointer-events: none;
-    border-radius: 14px;
+    border-radius: 15px;
   }
   
   @keyframes shimmer {
@@ -150,14 +169,13 @@
     transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(0,0,0,0.15);
   }
-
+  
   button:active:not(:disabled) {
     transform: translateY(0);
   }
-
+  
   button:disabled {
     opacity: 0.6;
-    cursor: not-allowed;
     background: linear-gradient(135deg, #6a6a6a, #4a4a4a);
     animation: pulse 1.5s infinite;
   }
@@ -174,7 +192,7 @@
   }
 </style>
 
-<div class="compact">
+<div class="compact" class:windows-10={isWindows10}>
   <div class="bar">
     <div 
       class="fill" 

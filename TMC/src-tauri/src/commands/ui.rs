@@ -4,6 +4,146 @@
 /// displaying notifications, and positioning UI elements.
 use tauri::{AppHandle, Manager, State};
 
+/// Returns the window configuration values including border radius.
+///
+/// This command exposes the window styling values to the frontend
+/// so they can be synchronized dynamically instead of being hardcoded.
+#[tauri::command]
+pub fn cmd_get_window_config() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "border_radius": 16, // Matches the radius in window.rs and App.svelte
+        "titlebar_height": 32
+    }))
+}
+
+/// Returns the current platform information.
+///
+/// This command allows the frontend to detect the specific OS version
+/// to apply platform-specific styling (e.g., Windows 10 rounded corners).
+#[tauri::command]
+pub fn cmd_get_platform() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOEXW};
+        use std::mem;
+        
+        let mut version_info: OSVERSIONINFOEXW = unsafe { mem::zeroed() };
+        version_info.dwOSVersionInfoSize = mem::size_of::<OSVERSIONINFOEXW>() as u32;
+        
+        let result = unsafe { GetVersionExW(&mut version_info as *mut OSVERSIONINFOEXW as *mut _) };
+        
+        if result != 0 {
+            // Windows 10: version 10.0, build < 22000
+            // Windows 11: version 10.0, build >= 22000
+            if version_info.dwMajorVersion == 10 && version_info.dwMinorVersion == 0 {
+                if version_info.dwBuildNumber >= 22000 {
+                    Ok("windows-11".to_string())
+                } else {
+                    Ok("windows-10".to_string())
+                }
+            } else {
+                Ok("windows".to_string())
+            }
+        } else {
+            // Fallback: use registry
+            use windows_sys::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, HKEY_LOCAL_MACHINE, KEY_READ};
+            use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+            use std::ptr;
+            
+            let mut hkey = ptr::null_mut();
+            let mut product_name = [0u16; 256];
+            let mut name_size = product_name.len() as u32;
+            
+            let subkey = [
+                'S' as u16, 'O' as u16, 'F' as u16, 'T' as u16, 'W' as u16, 'A' as u16, 'R' as u16,
+                'E' as u16, '\\' as u16, 'M' as u16, 'i' as u16, 'c' as u16, 'r' as u16, 'o' as u16,
+                's' as u16, 'o' as u16, 'f' as u16, 't' as u16, '\\' as u16, 'W' as u16, 'i' as u16,
+                'n' as u16, 'd' as u16, 'o' as u16, 'w' as u16, 's' as u16, ' ' as u16, 'N' as u16,
+                'T' as u16, '\\' as u16, 'C' as u16, 'u' as u16, 'r' as u16, 'r' as u16, 'e' as u16,
+                'n' as u16, 't' as u16, 'V' as u16, 'e' as u16, 'r' as u16, 's' as u16, 'i' as u16,
+                'o' as u16, 'n' as u16, 0u16
+            ];
+            
+            let value_name = [
+                'P' as u16, 'r' as u16, 'o' as u16, 'd' as u16, 'u' as u16, 'c' as u16, 't' as u16,
+                'N' as u16, 'a' as u16, 'm' as u16, 'e' as u16, 0u16
+            ];
+            
+            let result = unsafe { 
+                RegOpenKeyExW(
+                    HKEY_LOCAL_MACHINE,
+                    subkey.as_ptr(),
+                    0,
+                    KEY_READ,
+                    &mut hkey
+                )
+            };
+            
+            if result == ERROR_SUCCESS {
+                let result = unsafe {
+                    RegQueryValueExW(
+                        hkey,
+                        value_name.as_ptr(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        product_name.as_mut_ptr() as *mut _,
+                        &mut name_size
+                    )
+                };
+                
+                if result == ERROR_SUCCESS {
+                    let name = String::from_utf16_lossy(&product_name[..name_size as usize / 2]);
+                    if name.contains("Windows 10") {
+                        Ok("windows-10".to_string())
+                    } else if name.contains("Windows 11") {
+                        Ok("windows-11".to_string())
+                    } else {
+                        Ok("windows".to_string())
+                    }
+                } else {
+                    Err("Failed to query registry value".to_string())
+                }
+            } else {
+                Err("Failed to open registry key".to_string())
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    Ok("other".to_string())
+}
+
+/// Update tray icon with current theme
+#[tauri::command]
+pub fn cmd_update_tray_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let _ = crate::ui::tray::update_tray_icon_with_theme(&app, &theme);
+    }
+    Ok(())
+}
+
+/// Apply rounded corners to the current window
+#[tauri::command]
+pub fn cmd_apply_rounded_corners(app: AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            if let Ok(hwnd) = window.hwnd() {
+                let _ = crate::system::window::set_rounded_corners(hwnd.0 as windows_sys::Win32::Foundation::HWND);
+                
+                // Force redraw after applying rounded corners
+                use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
+                unsafe {
+                    InvalidateRect(hwnd.0 as windows_sys::Win32::Foundation::HWND, std::ptr::null(), 1);
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 /// Shows the main window or creates it if it doesn't exist.
 ///
 /// This command delegates to the helper function to handle both
@@ -60,11 +200,32 @@ pub fn show_or_create_window(app: &AppHandle) {
         if let Ok(size) = window.inner_size() {
             tracing::info!("Current window size: {}x{}", size.width, size.height);
         }
+        
+        // Reapply rounded corners when showing existing window
+        #[cfg(windows)]
+        {
+            tracing::info!("Reapplying rounded corners to existing window");
+            // PRIMA: Applica i bordi arrotondati
+            if let Ok(hwnd) = window.hwnd() {
+                let _ = crate::system::window::set_rounded_corners(
+                    hwnd.0 as windows_sys::Win32::Foundation::HWND
+                );
+            }
+            // DOPO: Applica shadow per Win11
+            let _ = crate::system::window::enable_shadow_for_win11(&window);
+        }
+        
         let _: Result<(), _> = window.set_skip_taskbar(false); // Show in taskbar
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
         let _ = window.center();
+        
+        // Apply rounded corners using centralized function
+        #[cfg(windows)]
+        {
+            let _ = crate::system::window::apply_window_decorations(&window);
+        }
     } else {
         tracing::info!("Creating new main window...");
         tracing::info!("Window dimensions will be: 500x700");
@@ -76,22 +237,32 @@ pub fn show_or_create_window(app: &AppHandle) {
         .title("Tommy Memory Cleaner")
         .inner_size(500.0, 700.0)
         .resizable(false)
-        .shadow(true)  // Enable shadow for rounded corners
-        .center()
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)  // Disabilita shadow per Windows 10
         .skip_taskbar(false)  // Show in taskbar
-        .visible(true)  // Ensure window is visible
+        .visible(true)  // Show window immediately for SetWindowRgn
         .build();
 
         match result {
             Ok(window) => {
                 tracing::info!("Window created successfully");
+                
+                // Center window first
+                let _ = window.center();
+                
+                // Apply rounded corners using centralized function
+                #[cfg(windows)]
+                {
+                    let _ = crate::system::window::apply_window_decorations(&window);
+                    // Re-center window after applying rounded corners
+                    let _ = window.center();
+                }
+                
                 if let Ok(size) = window.inner_size() {
                     tracing::info!("Actual window size: {}x{}", size.width, size.height);
                 }
                 let _ = window.set_skip_taskbar(false);
-                if let Err(e) = window.show() {
-                    tracing::error!("Failed to show newly created window: {:?}", e);
-                }
                 let _ = window.set_focus();
             }
             Err(e) => {
@@ -149,7 +320,6 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
     let cursor_x = cursor_pos.x as i32;
     let cursor_y = cursor_pos.y as i32;
 
-    // Get all available monitors and find the one containing the cursor
     let monitor = match window.available_monitors() {
         Ok(monitors) => {
             // Find monitor containing the cursor
@@ -182,32 +352,35 @@ pub fn position_tray_menu(window: &tauri::WebviewWindow) {
             }
 
             // If not found, use primary monitor as fallback
-            found_monitor.unwrap_or_else(|| {
+            if let Some(m) = found_monitor {
+                m
+            } else {
                 tracing::warn!("Cursor not found in any monitor, using primary monitor");
-                window
-                    .primary_monitor()
-                    .ok()
-                    .flatten()
-                    .expect("No primary monitor available")
-            })
+                if let Some(m) = window.primary_monitor().ok().flatten() {
+                    m
+                } else {
+                    tracing::error!("No primary monitor available");
+                    // Return current monitor as last resort
+                    if let Some(m) = window.current_monitor().ok().flatten() {
+                        m
+                    } else {
+                        tracing::error!("No current monitor available");
+                        // Return a default monitor position
+                        return;
+                    }
+                }
+            }
         }
         Err(e) => {
             tracing::error!("Failed to get available monitors: {:?}", e);
             // Fallback: use current_monitor or primary_monitor directly
-            match window
-                .current_monitor()
-                .ok()
-                .flatten()
-                .or_else(|| window.primary_monitor().ok().flatten())
-            {
-                Some(m) => {
-                    tracing::warn!("Using fallback monitor (current or primary)");
-                    m
-                }
-                None => {
-                    tracing::error!("No monitors available");
-                    return;
-                }
+            if let Some(m) = window.current_monitor().ok().flatten() {
+                m
+            } else if let Some(m) = window.primary_monitor().ok().flatten() {
+                m
+            } else {
+                tracing::error!("No monitor available");
+                return;
             }
         }
     };

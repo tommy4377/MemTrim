@@ -75,6 +75,11 @@ export interface Config {
   run_on_startup: boolean
 
   show_opt_notifications: boolean
+  request_elevation_on_startup: boolean
 
   tray: TrayConfig
+  
+  // Platform detection fields
+  platform_detected?: boolean
+  is_windows_10?: boolean
 }

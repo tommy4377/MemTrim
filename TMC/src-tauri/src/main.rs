@@ -81,6 +81,43 @@ fn to_wide(s: &str) -> Vec<u16> {
 }
 
 // ============= PRIVILEGE MANAGEMENT =============
+/// Restart the application with elevated privileges
+#[cfg(windows)]
+fn restart_with_elevation() -> Result<(), Box<dyn std::error::Error>> {
+    use std::env;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::Foundation::GetLastError;
+    
+    let current_exe = env::current_exe()?;
+    let exe_path = current_exe.to_string_lossy();
+    
+    tracing::info!("Restarting application with elevated privileges...");
+    
+    // Keep the wide string alive for the duration of the call
+    let runas = to_wide("runas");
+    let exe_wide = exe_path.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
+    
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(), // HWND null
+            runas.as_ptr(),
+            exe_wide.as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            1, // SW_SHOWNORMAL
+        )
+    };
+    
+    // ShellExecuteW returns HINSTANCE (HANDLE) which is isize in windows-sys
+    if (result as isize) <= 32 {
+        let error_code = unsafe { GetLastError() };
+        tracing::error!("Failed to restart with elevation. ShellExecuteW returned: {:?}, GetLastError: {}", result as isize, error_code);
+        Err(format!("Failed to restart with elevation (code: {:?}, error: {})", result as isize, error_code).into())
+    } else {
+        std::process::exit(0);
+    }
+}
+
 /// Initialize required Windows privileges for memory optimization
 ///
 /// This function ensures the process has the necessary privileges
@@ -115,6 +152,7 @@ fn ensure_privileges_initialized() -> Result<(), String> {
             }
             Err(e) => {
                 tracing::warn!("✗ Failed to acquire {}: {}", priv_name, e);
+                // Don't fail completely, just warn
             }
         }
     }
@@ -124,6 +162,8 @@ fn ensure_privileges_initialized() -> Result<(), String> {
         success_count,
         privileges.len()
     );
+    
+    // Mark as initialized even if not all privileges were acquired
     *guard = true;
     Ok(())
 }
@@ -786,54 +826,44 @@ fn main() {
         register_app_for_notifications();
     }
 
-    // CRITICAL CHECK: Verify program is running as administrator
+    // Check if running with elevated privileges and manage task scheduler
     #[cfg(windows)]
     {
-        use crate::system::is_app_elevated;
-        if !is_app_elevated() {
-            eprintln!("CRITICAL ERROR: Tommy Memory Cleaner must be run as Administrator!");
-            eprintln!("CRITICAL ERROR: Tommy Memory Cleaner must be run as Administrator!");
-
-            // Show error message to user
-            let error_msg = format!(
-                "Tommy Memory Cleaner requires administrator privileges to work properly.\n\n\
-                Tommy Memory Cleaner requires administrator privileges to work properly.\n\n\
-                Please right-click the executable and select \"Run as administrator\".\n\
-                Please right-click the executable and select \"Run as administrator\"."
-            );
-
-            #[cfg(windows)]
-            {
-                use std::os::windows::ffi::OsStrExt;
-                use windows_sys::Win32::UI::WindowsAndMessaging::{
-                    MessageBoxW, MB_ICONERROR, MB_OK,
-                };
-
-                let title: Vec<u16> =
-                    std::ffi::OsStr::new("Tommy Memory Cleaner - Privileges Required")
-                        .encode_wide()
-                        .chain(std::iter::once(0))
-                        .collect();
-
-                let msg: Vec<u16> = std::ffi::OsStr::new(&error_msg)
-                    .encode_wide()
-                    .chain(std::iter::once(0))
-                    .collect();
-
-                unsafe {
-                    MessageBoxW(
-                        0 as _,
-                        msg.as_ptr(),
-                        title.as_ptr(),
-                        (MB_OK | MB_ICONERROR) as u32,
-                    );
+        use crate::system::{is_app_elevated, elevated_task::{create_elevated_task, run_via_elevated_task, elevated_task_exists}};
+        let is_elevated = is_app_elevated();
+        
+        // Load config to check elevation preference
+        let config_path = crate::config::get_portable_detector().config_path();
+        
+        if config_path.exists() {
+            if let Ok(config_str) = std::fs::read_to_string(&config_path) {
+                if let Ok(config) = serde_json::from_str::<crate::config::Config>(&config_str) {
+                    if config.request_elevation_on_startup {
+                        // First time setup: create elevated task if needed
+                        if !elevated_task_exists() {
+                            tracing::info!("Creating elevated task for admin access...");
+                            if let Err(e) = create_elevated_task() {
+                                tracing::error!("Failed to create elevated task: {}", e);
+                            }
+                        }
+                        
+                        // If not elevated, run via task scheduler
+                        if !is_elevated {
+                            tracing::info!("Running via elevated task...");
+                            if let Err(e) = run_via_elevated_task() {
+                                tracing::error!("Failed to run via elevated task: {}", e);
+                            }
+                        }
+                    }
                 }
             }
-
-            std::process::exit(1);
         }
-
-        tracing::info!("Admin privileges confirmed - application running with elevated privileges");
+        
+        if is_elevated {
+            tracing::info!("Application running with elevated privileges");
+        } else {
+            tracing::warn!("Application running without elevated privileges - some features may be limited");
+        }
     }
     
     // Initialize advanced optimization features
@@ -902,6 +932,15 @@ fn main() {
         rate_limiter: Arc::new(Mutex::new(rate_limiter)),
     };
 
+    // DPI Awareness for Windows - Fix blurry edges on high DPI
+    #[cfg(target_os = "windows")]
+    {
+        unsafe {
+            use windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness;
+            SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
+        }
+    }
+
     // Build Tauri v2 app
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new()
@@ -935,6 +974,10 @@ fn main() {
         .plugin(tauri_plugin_positioner::init())
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
+            // Commands from app_info module
+            commands::app_info::get_app_info,
+            commands::app_info::get_app_version,
+            commands::app_info::get_company_name,
             // Commands from config module
             commands::config::cmd_exit,
             commands::config::cmd_get_config,
@@ -952,12 +995,18 @@ fn main() {
             commands::system::cmd_run_on_startup,
             commands::system::cmd_set_always_on_top,
             commands::system::cmd_set_priority,
+            commands::system::cmd_restart_with_elevation,
+            commands::system::cmd_manage_elevated_task,
             // Commands from theme module
             commands::theme::cmd_get_system_theme,
             commands::theme::cmd_get_system_language,
             // Commands from ui module
             commands::ui::cmd_show_or_create_window,
             commands::ui::cmd_show_notification,
+            commands::ui::cmd_get_window_config,
+            commands::ui::cmd_get_platform,
+            commands::ui::cmd_apply_rounded_corners,
+            commands::ui::cmd_update_tray_theme,
             // Commands from i18n module
             commands::i18n::cmd_set_translations,
             // Commands from hotkeys module
@@ -969,18 +1018,26 @@ fn main() {
             // Initial log
             tracing::info!("Application setup started");
 
-            // Ensure main window is visible on startup
-            if let Some(window) = app_handle.get_webview_window("main") {
-                tracing::info!("Main window found, showing it...");
-                let _ = window.set_skip_taskbar(false);
-                if let Err(e) = window.show() {
-                    tracing::error!("Failed to show window: {:?}", e);
+            // Check if this is first run - if so, don't show main window yet
+            let is_first_run = {
+                if let Ok(cfg) = state.cfg.try_lock() {
+                    !cfg.setup_completed
                 } else {
-                    tracing::info!("Window shown successfully");
+                    false
                 }
-                let _ = window.set_focus();
+            };
+
+            // Only show main window if setup is already completed
+            if !is_first_run {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    tracing::info!("Setup already completed, showing main window...");
+                    let _ = window.set_skip_taskbar(false);
+                    if let Err(e) = window.show() {
+                        tracing::error!("Failed to show window: {:?}", e);
+                    }
+                }
             } else {
-                tracing::warn!("Main window not found at setup start");
+                tracing::info!("First run detected - main window will be shown after setup");
             }
 
             // Build tray icon - handle errors without crashing
@@ -1119,24 +1176,39 @@ fn main() {
                 let app_clone = app_handle.clone();
                 match WebviewWindowBuilder::new(&app_clone, "setup", setup_url)
                     .title("Tommy Memory Cleaner - Setup")
-                    .inner_size(480.0, 600.0)
+                    .inner_size(490.0, 600.0)
                     .min_inner_size(380.0, 500.0)
-                    .max_inner_size(480.0, 700.0)
+                    .max_inner_size(490.0, 700.0)
                     .resizable(false)
                     .decorations(false)
                     .transparent(true)
-                    .shadow(true)
-                    .center()
+                    .shadow(false)
                     .skip_taskbar(false)
                     .always_on_top(true)
-                    .visible(true)
+                    .visible(true)  // Show window immediately for SetWindowRgn
                     .build()
                 {
                     Ok(setup_window) => {
                         tracing::info!("Setup window created successfully");
+                        // Center the setup window
+                        let _ = setup_window.center();
+                        
                         // Assicura che sia sempre in primo piano
                         let _ = setup_window.set_always_on_top(true);
+                        
+                        // Apply rounded corners on Windows 10/11
+                        #[cfg(windows)]
+                        {
+                            // Enable shadow for Windows 11
+                            let _ = crate::system::window::enable_shadow_for_win11(&setup_window);
+                            // Apply DWM attributes
+                            if let Ok(hwnd) = setup_window.hwnd() {
+                                let _ = crate::system::window::set_rounded_corners(hwnd.0 as windows_sys::Win32::Foundation::HWND);
+                            }
+                        }
+                        
                         let _ = setup_window.set_focus();
+                        
                         // Ri-applica always_on_top dopo un breve delay per sicurezza
                         let app_clone = app_handle.clone();
                         tauri::async_runtime::spawn(async move {

@@ -1,10 +1,11 @@
-# Tommy Memory Cleaner v2.5.0
+# Tommy Memory Cleaner v2.6.0
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Windows 10 border fixes
-- Dark-theme consistency
+- DPI fixes
+- Window centering
+- Rounded-corner handling
 
 ## Requirements
 - Windows 10 or 11, 64-bit
