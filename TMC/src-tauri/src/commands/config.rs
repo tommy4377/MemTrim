@@ -166,10 +166,23 @@ pub fn cmd_save_config(
         update_bool!(minimize_to_tray);
         update_bool!(show_opt_notifications);
         update_bool!(close_after_opt);
+        update_bool!(request_elevation_on_startup);
         // Setup completed - important to prevent setup from opening multiple times
         if let Some(v) = obj.get("setup_completed") {
             if let Some(b) = v.as_bool() {
                 current_cfg.setup_completed = b;
+            }
+        }
+        
+        // Platform detection fields
+        if let Some(v) = obj.get("platform_detected") {
+            if let Some(b) = v.as_bool() {
+                current_cfg.platform_detected = b;
+            }
+        }
+        if let Some(v) = obj.get("is_windows_10") {
+            if let Some(b) = v.as_bool() {
+                current_cfg.is_windows_10 = b;
             }
         }
         // Handle run_on_startup specially - it needs to call the system function
@@ -313,6 +326,18 @@ pub fn cmd_complete_setup(
 
     // Apply settings from setup
     if let Some(obj) = setup_data.as_object() {
+        // Handle platform detection
+        if let Some(v) = obj.get("platform_detected") {
+            if let Some(b) = v.as_bool() {
+                cfg.platform_detected = b;
+            }
+        }
+        if let Some(v) = obj.get("is_windows_10") {
+            if let Some(b) = v.as_bool() {
+                cfg.is_windows_10 = b;
+            }
+        }
+        
         if let Some(v) = obj.get("run_on_startup") {
             if let Some(b) = v.as_bool() {
                 // Execute operation and log any errors
@@ -442,7 +467,9 @@ pub fn cmd_complete_setup(
         .title("Tommy Memory Cleaner")
         .inner_size(500.0, 700.0)
         .resizable(false)
-        .center()
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)  // Disabilita shadow per Windows 10
         .skip_taskbar(false)
         .visible(true)
         .build()
@@ -484,6 +511,14 @@ pub fn cmd_complete_setup(
             // Focus the window (after show and center)
             if let Err(e) = main_window.set_focus() {
                 tracing::warn!("Failed to focus main window: {:?}", e);
+            }
+
+            // Apply rounded corners using centralized function
+            #[cfg(windows)]
+            {
+                let _ = crate::system::window::apply_window_decorations(&main_window);
+                // Re-center window after applying rounded corners
+                let _ = main_window.center();
             }
 
             // Apply always_on_top directly to the main window as well

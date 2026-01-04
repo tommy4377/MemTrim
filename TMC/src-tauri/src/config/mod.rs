@@ -2,6 +2,8 @@
 ///
 /// Handles loading, saving, and validating application configuration
 /// with support for portable installations and proper data directory handling.
+pub mod app_info;
+
 use crate::memory::types::Areas;
 use crate::security::{
     contains_injection_patterns, is_valid_hex_color, sanitize_hotkey, sanitize_process_name,
@@ -361,6 +363,8 @@ pub struct Config {
     pub run_on_startup: bool,
     pub show_opt_notifications: bool,
     pub tray: TrayConfig,
+    #[serde(default)]
+    pub request_elevation_on_startup: bool,
 
     #[serde(default)]
     pub is_portable_install: bool,
@@ -370,6 +374,12 @@ pub struct Config {
 
     #[serde(default = "default_setup_completed")]
     pub setup_completed: bool,
+    
+    #[serde(default)]
+    pub platform_detected: bool,
+    
+    #[serde(default)]
+    pub is_windows_10: bool,
 }
 
 fn default_setup_completed() -> bool {
@@ -385,7 +395,7 @@ fn default_main_color_light() -> String {
 }
 
 fn default_main_color_dark() -> String {
-    "#0a84ff".to_string() // Default blue for dark theme
+    "#1363b4".to_string() // Default blue for dark theme
 }
 
 fn default_main_color() -> String {
@@ -411,7 +421,7 @@ impl Default for Config {
             font_size: 13.0,
             language: "en".to_string(),
             theme: "dark".to_string(),
-            main_color_hex: "#0a84ff".to_string(), // Deprecated, kept for compatibility
+            main_color_hex: "#1363b4".to_string(), // Deprecated, kept for compatibility
             main_color_hex_light: default_main_color_light(),
             main_color_hex_dark: default_main_color_dark(),
             profile: default_profile,
@@ -422,9 +432,12 @@ impl Default for Config {
             run_on_startup: true,
             show_opt_notifications: true,
             tray: TrayConfig::default(),
+            request_elevation_on_startup: true,
             is_portable_install: false,
             config_version: default_config_version(),
             setup_completed: false,
+            platform_detected: false,
+            is_windows_10: false,
         }
     }
 }

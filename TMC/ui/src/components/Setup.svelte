@@ -6,6 +6,8 @@
   import Titlebar from './Titlebar.svelte'
   import CustomSelect from './CustomSelect.svelte'
   import { t, setLanguage } from '../i18n/index'
+  import { config } from '../lib/store'
+  import type { Config } from '../lib/types'
 
   let runOnStartup = true
   let theme = 'dark'
@@ -13,6 +15,9 @@
   let showNotifications = true
   let language = 'en'
   let isLoading = false
+  let isWindows10 = false
+  let cfg: Config | null = null
+  let cfgUnsub: (() => void) | null = null
 
   const languageOptions = [
     { value: 'en', label: 'English' },
@@ -54,6 +59,12 @@
     } catch (error) {
       console.error('Failed to get system language:', error)
     }
+
+    // Usa la configurazione salvata per Windows 10
+    cfgUnsub = config.subscribe((v) => {
+      cfg = v;
+      isWindows10 = v?.is_windows_10 ?? false;
+    });
 
     // Applica il tema iniziale
     document.documentElement.setAttribute('data-theme', theme)
@@ -116,6 +127,9 @@
     if (unlistenSetupComplete) {
       unlistenSetupComplete()
     }
+    if (cfgUnsub) {
+      cfgUnsub()
+    }
   })
 
   function handleThemeChange(value: string) {
@@ -138,6 +152,15 @@
     if (isLoading) return // Previeni doppi click
     isLoading = true
     try {
+      // Detect platform before completing setup
+      let isWindows10 = false;
+      try {
+        const platform = await invoke('cmd_get_platform') as string;
+        isWindows10 = platform === 'windows-10';
+      } catch (error) {
+        console.error('Failed to get platform:', error);
+      }
+      
       await invoke('cmd_complete_setup', {
         setupData: {
           run_on_startup: runOnStartup,
@@ -145,6 +168,8 @@
           always_on_top: alwaysOnTop,
           show_opt_notifications: showNotifications,
           language: language,
+          platform_detected: true,
+          is_windows_10: isWindows10,
         },
       })
 
@@ -160,7 +185,7 @@
           // Verifica se la finestra principale esiste e è visibile
           // Usa l'API corretta di Tauri v2
           const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-          const mainWindow = WebviewWindow.getByLabel('main')
+          const mainWindow = (await WebviewWindow.getByLabel('main')) as WebviewWindow | null
 
           if (mainWindow) {
             try {
@@ -239,15 +264,9 @@
   }
 </script>
 
-<button
-  class="setup-container"
-  on:mousedown={handleDragStart}
-  tabindex="-1"
-  type="button"
-  style="background: none; border: none; padding: 0; width: 100%; height: 100%;"
->
+<div class="setup-container" class:windows-10={isWindows10}>
   <Titlebar title="Tommy Memory Cleaner - Setup" onClose={handleClose} />
-
+  
   <div class="setup-content">
     <div class="setup-header">
       <h1>{$t('Welcome to Tommy Memory Cleaner')}</h1>
@@ -309,7 +328,7 @@
       </button>
     </div>
   </div>
-</button>
+</div>
 
 <style>
   :global(html),
@@ -319,10 +338,11 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: transparent;
+    background: var(--bg);
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
+    cursor: url('/cursors/light/arrow.cur'), auto;
   }
 
   /* Rimuove eventuali bordi visibili su Windows 10 */
@@ -331,36 +351,77 @@
     outline: none !important;
   }
 
-  .setup-container {
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
-    color: var(--text);
-    overflow: hidden;
-    border-radius: 10px;
-    position: relative;
+  :global(body) {
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable', Roboto, Oxygen, Ubuntu,
+      Cantarell, 'Helvetica Neue', sans-serif;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
+  :global(*) {
+    box-sizing: border-box;
+  }
+
+  /* Fix per il padding-top della titlebar nel setup */
+  :global(.app) {
+    padding-top: 0 !important;
+  }
+  
+  .setup-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: inherit;
+    background: var(--bg);
+    color: var(--fg);
+    position: relative;
+    animation: fadeIn 0.2s ease;
+  }
+  
+  /* Applica border-radius solo su Windows 10 */
+  .setup-container.windows-10 {
+    border-radius: var(--window-border-radius, 16px);
+  }
+  
   .setup-content {
     flex: 1;
-    padding: 12px 16px;
-    overflow: hidden;
+    padding: 10px;
+    padding-top: var(--titlebar-height, 32px); /* Usa la variabile CSS come gli altri */
+    background: var(--bg);
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    min-height: 0;
-    max-height: 100%;
+    gap: 8px;
   }
-
+  
+  /* Scrollbar styling come nella full view */
   .setup-content::-webkit-scrollbar {
-    display: none;
+    width: 5px;
+  }
+  
+  .setup-content::-webkit-scrollbar-track {
+    background: var(--bar-track);
+  }
+  
+  .setup-content::-webkit-scrollbar-thumb {
+    background: var(--bar-fill);
+    border-radius: 3px;
   }
 
-  .setup-content {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .setup-header {
@@ -377,7 +438,7 @@
     font-size: 20px;
     font-weight: 600;
     margin: 0;
-    color: var(--text);
+    color: var(--fg);
   }
 
   .app-icon {
@@ -390,7 +451,7 @@
   .setup-options {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -404,6 +465,9 @@
     flex-direction: column;
     gap: 8px;
     flex-shrink: 0;
+    /* Rimuovi trasparenza */
+    opacity: 1 !important;
+    background-color: var(--card) !important;
   }
 
   .option-row {
@@ -418,7 +482,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    cursor: pointer;
     font-size: 13px;
     font-weight: 450;
     flex: 1;
@@ -436,9 +499,14 @@
   .option-row input[type='checkbox'] {
     width: 18px;
     height: 18px;
-    cursor: pointer;
-    accent-color: var(--primary);
+    cursor: url('/cursors/light/hand.cur'), pointer;
+    accent-color: var(--btn-bg);
     flex-shrink: 0;
+  }
+  
+  /* Dark theme cursor for checkbox */
+  html[data-theme='dark'] .option-row input[type='checkbox'] {
+    cursor: url('/cursors/dark/hand.cur'), pointer;
   }
 
   .option-row > label:first-child {
@@ -447,32 +515,40 @@
   }
 
   .setup-footer {
-    padding: 8px 0;
+    padding: 8px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
     display: flex;
     justify-content: center;
     flex-shrink: 0;
   }
 
   .complete-btn {
-    background: var(--primary);
+    background: var(--btn-bg);
     color: var(--text-on-primary);
     border: none;
     border-radius: 8px;
     padding: 10px 28px;
     font-size: 14px;
     font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.2s;
+    cursor: url('/cursors/light/hand.cur'), pointer;
+    transition: none; /* Rimuovi transizioni che potrebbero causare trasparenza */
+    /* Rimuovi trasparenza */
+    opacity: 1 !important;
+    background-color: var(--btn-bg) !important;
   }
-
+  
+  
   .complete-btn:hover:not(:disabled) {
-    opacity: 0.9;
+    opacity: 1 !important; /* Rimuovi trasparenza al hover */
+    transform: none !important;
   }
 
   .complete-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+    opacity: 1 !important; /* Rimuovi trasparenza anche quando disabilitato */
+    cursor: url('/cursors/light/no.cur'), not-allowed;
   }
+  
 
   .complete-btn.no-shimmer::after {
     display: none !important;

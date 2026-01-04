@@ -389,7 +389,6 @@ pub fn show_windows_notification(
 #[cfg(windows)]
 pub fn register_app_for_notifications() {
     use std::ffi::OsStr;
-use std::ptr::null_mut;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::Registry::{RegSetValueExW, HKEY_CURRENT_USER, REG_SZ};
 
@@ -419,7 +418,7 @@ use std::ptr::null_mut;
         };
         // Prova prima ad aprire la chiave per verificare se esiste
         let key_path_wide: Vec<u16> = OsStr::new(key_path).encode_wide().chain(Some(0)).collect();
-        let mut hkey_test: windows_sys::Win32::Foundation::HANDLE = null_mut();
+        let mut hkey_test: windows_sys::Win32::Foundation::HANDLE = std::ptr::null_mut();
         let open_result = RegOpenKeyExW(
             HKEY_CURRENT_USER,
             key_path_wide.as_ptr(),
@@ -427,7 +426,7 @@ use std::ptr::null_mut;
             KEY_ALL_ACCESS,
             &mut hkey_test,
         );
-        if open_result == 0 && !hkey_test.is_null() {
+        if open_result == 0 && hkey_test != std::ptr::null_mut() {
             RegCloseKey(hkey_test);
             // Elimina la chiave - potrebbe richiedere più tentativi
             let delete_result = RegDeleteKeyW(HKEY_CURRENT_USER, key_path_wide.as_ptr());
@@ -457,7 +456,7 @@ use std::ptr::null_mut;
 
     unsafe {
         // Crea la chiave se non esiste e imposta i valori
-        let mut hkey: windows_sys::Win32::Foundation::HANDLE = null_mut();
+        let mut hkey: windows_sys::Win32::Foundation::HANDLE = std::ptr::null_mut();
         let result = windows_sys::Win32::System::Registry::RegCreateKeyExW(
             HKEY_CURRENT_USER,
             key_path_wide.as_ptr(),
@@ -465,9 +464,9 @@ use std::ptr::null_mut;
             std::ptr::null(),
             0,
             0x20006, // KEY_WRITE
-            std::ptr::null_mut(),
+            std::ptr::null(),
             &mut hkey,
-            std::ptr::null_mut(),
+            0 as *mut u32,
         );
 
         if result == 0 {
