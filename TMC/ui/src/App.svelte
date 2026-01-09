@@ -56,10 +56,10 @@
 
   // Window dimensions
   const WINDOW_SIZES = {
-    full: { width: 490, height: 700 },
+    full: { width: 500, height: 700 },
     compact: { width: 420, height: 100 },
     min: { width: 360, height: 90 },
-    max: { width: 490, height: 700 },
+    max: { width: 500, height: 700 },
   } as const
 
   // ========== LIFECYCLE ==========
@@ -70,28 +70,56 @@
     // 1. Leggi la configurazione iniziale
     let currentConfig = await getConfig()
     
-    // 2. Controlla se è Windows 10 solo la prima volta e salva in config
-    if (!currentConfig.platform_detected) {
-      try {
-        const platform = await invoke('cmd_get_platform') as string
-        const isWindows10 = platform === 'windows-10'
+    // 2. ALWAYS detect platform on every startup for correct border styling
+    // This ensures existing configs get updated if the Windows version changes
+    // or if the previous detection was incorrect
+    try {
+      const platform = await invoke('cmd_get_platform') as string
+      const isWindows10 = platform === 'windows-10'
+      
+      // Only save if changed to avoid unnecessary writes
+      if (currentConfig.is_windows_10 !== isWindows10 || !currentConfig.platform_detected) {
         await saveConfig({ 
           platform_detected: true,
           is_windows_10: isWindows10 
         })
-        console.log(`Platform detected: ${platform}`)
-        // Aggiorna la configurazione locale
         currentConfig = { ...currentConfig, platform_detected: true, is_windows_10: isWindows10 }
-      } catch (error) {
-        console.error('Failed to detect platform:', error)
+        console.log(`Platform updated: ${platform}`)
+      } else {
+        console.log(`Platform unchanged: ${platform}`)
       }
+    } catch (error) {
+      console.error('Failed to detect platform:', error)
     }
     
+    // Apply theme immediately to avoid flash
+    if (currentConfig) {
+      applyThemeColors(currentConfig)
+    }
+
     // 3. Setup window CON la configurazione aggiornata
     await setupWindow(currentConfig)
     
     // 4. Initialize app
     await initApp()
+    
+    // Force correct size on startup to prevent scrollbars
+    // This fixes the issue where scrollbar appears after setup
+    try {
+      const window = WebviewWindow.getCurrent()
+      // Only set if not already in compact mode (though usually it starts full)
+      if (!currentConfig?.compact_mode) {
+        // FIX: Wait for window animations/init to settle
+        setTimeout(async () => {
+          try {
+            await window.setSize(new LogicalSize(500, 700))
+          } catch (e) { console.warn('Resize failed:', e) }
+        }, 250)
+      }
+    } catch (e) {
+      console.warn('Failed to force window size:', e)
+    }
+
     isLoading = false
     initError = null
 
@@ -119,12 +147,39 @@
     }
     window.addEventListener('resize', handleResize)
 
+    // FIX: Function to apply the scrollbar workaround
+    async function applyScrollbarFix() {
+       // Only apply if NOT in compact mode
+       // We check cfg (store) or fetch fresh config to be sure
+       const currentCfg = cfg || await getConfig();
+       
+       if (!currentCfg?.compact_mode) {
+         console.log('Triggering Scrollbar Fix Sequence...');
+         
+         // 1. Force Compact Mode
+         isCompact = true
+         await appWindow.setSize(new LogicalSize(WINDOW_SIZES.compact.width, WINDOW_SIZES.compact.height));
+         
+         // 2. Wait and Revert
+         setTimeout(async () => {
+           isCompact = false
+           await appWindow.setSize(new LogicalSize(WINDOW_SIZES.full.width, WINDOW_SIZES.full.height));
+           await appWindow.center();
+           console.log('Scrollbar Fix Sequence Completed');
+         }, 150);
+       }
+    }
+
     // Listen for setup-complete event to reload config
     const setupCompleteUnlisten = await listen('setup-complete', async () => {
       // Ricarica la configurazione quando il setup è completato
       if (isAppInitialized()) {
         await initApp()
         // La config verrà aggiornata automaticamente tramite il subscribe sopra
+        
+        // Trigger scrollbar fix immediately after setup
+        // Uses a small delay to ensure window visibility
+        setTimeout(() => applyScrollbarFix(), 500);
       }
     })
 
@@ -214,18 +269,31 @@
     try {
       const size = compact ? WINDOW_SIZES.compact : WINDOW_SIZES.full
 
+      // Get current position BEFORE resizing
+      const currentPos = await appWindow.innerPosition()
+
       // Disable resizing temporarily for smooth transition
       await appWindow.setResizable(false)
 
-      // Update size
+      // Update size - use current position, don't recenter
       await appWindow.setSize(new LogicalSize(size.width, size.height))
 
-      // Re-center window
-      await appWindow.center()
+      // Keep window at same top-left position (don't center on every toggle)
+      // This prevents the window from jumping around the screen
+      // Only adjust if going to compact mode (shrink at top)
+      // or expanding (keep same top position)
 
       // Re-enable resizing for full view
       if (!compact) {
         await appWindow.setResizable(false)
+      }
+
+      // FIX: Re-apply rounded corners on Windows 10 to ensure border is correct
+      // This helps with "glitchy" transitions
+      try {
+        await invoke('cmd_apply_rounded_corners')
+      } catch (e) {
+        console.error('Failed to re-apply rounded corners:', e)
       }
     } catch (error) {
       console.error('Failed to update window size:', error)
