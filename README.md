@@ -1,4 +1,4 @@
-# Tommy Memory Cleaner v0.6.0
+# Tommy Memory Cleaner v0.7.0
 
 Historical release of the project now known as MemTrim.
 
