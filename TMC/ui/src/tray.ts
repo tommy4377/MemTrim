@@ -10,6 +10,11 @@ import { areasForProfile, areasToString } from './lib/profiles'
 import { dict, setLanguage, lang } from './i18n'
 import { get } from 'svelte/store'
 
+// Disable the default WebView2 context menu in production (same as main.ts)
+if (import.meta.env.PROD) {
+  document.addEventListener('contextmenu', (e) => e.preventDefault())
+}
+
 const win = getCurrentWebviewWindow()
 
 // Expose win globally for Rust inline code
@@ -173,9 +178,15 @@ setTimeout(() => {
   isInitializing = false
 }, 500)
 
+// Guard flag to prevent re-entrant closeMenu calls (breaks IPC infinite loop)
+let isClosing = false
+
 /** Close the tray menu */
 function closeMenu() {
-  if (isInitializing) return
+  if (isInitializing || isClosing) return
+
+  // Set guard immediately to prevent re-entrant calls from focus/visibility events
+  isClosing = true
 
   document.body.classList.remove('menu-open')
 
@@ -186,6 +197,11 @@ function closeMenu() {
     setTimeout(() => {
       win.hide().catch(() => {})
     }, 100)
+  }).finally(() => {
+    // Release guard after hide completes and a small settling delay
+    setTimeout(() => {
+      isClosing = false
+    }, 150)
   })
 }
 
@@ -226,13 +242,6 @@ win.onFocusChanged((event: any) => {
     setTimeout(() => {
       closeMenu()
     }, 100)
-  }
-})
-
-// Fallback for click on overlay (if present)
-document.querySelector('.click-overlay')?.addEventListener('click', () => {
-  if (document.body.classList.contains('menu-open')) {
-    win.hide()
   }
 })
 

@@ -1,31 +1,46 @@
-# Tommy Memory Cleaner v0.7.0
+# Tommy Memory Cleaner v0.8.0
 
 Historical release of the project now known as MemTrim.
 
 ## Highlights
-- Setup polish
-- Stable 500x700 layout
-- Reliability cleanup
+
+- Safer elevation
+- Logging improvements
+- Window handling fixes
 
 ## Requirements
-- Windows 10 or 11, 64-bit
+
+- Windows 10 or Windows 11, 64-bit
 - Administrator privileges
 - Microsoft Edge WebView2 Runtime
 
 ## Portable usage
-Run TommyMemoryCleaner.exe as administrator, choose a profile, then optimize from the UI, tray, hotkey or CLI.
 
-CLI examples:
-    TommyMemoryCleaner.exe /Profile:Balanced
-    TommyMemoryCleaner.exe /?
+Run `TommyMemoryCleaner.exe` as administrator, choose a profile, then optimize from the UI, tray, hotkey or CLI.
 
-## Build
-    cd TMC/ui
-    npm install
-    npm run build
-    cd ../src-tauri
-    cargo build --release
+```text
+TommyMemoryCleaner.exe /Profile:Balanced
+TommyMemoryCleaner.exe /?
+```
 
-Output: TMC/src-tauri/target/release/TommyMemoryCleaner.exe
+## Build from source
 
-Maintained by @tommy4377.
+```powershell
+cd TMC/ui
+npm install
+npm run build
+cd ../src-tauri
+cargo build --release
+```
+
+Output: `TMC/src-tauri/target/release/TommyMemoryCleaner.exe`.
+
+## Credits
+
+Maintained by [@tommy4377](https://github.com/tommy4377).
+
+This release includes Windows elevation, logging and window-handling contributions from [@LAMAgalletta0IQ](https://github.com/LAMAgalletta0IQ).
+
+## License
+
+Released under the [MIT License](LICENSE).
