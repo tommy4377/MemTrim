@@ -27,9 +27,12 @@ impl PortableDetector {
     pub fn new() -> io::Result<Self> {
         let exe_path = std::env::current_exe()?;
 
-        // The program is always "portable" (can be moved anywhere)
-        // but data is ALWAYS saved in AppData for centralization
-        let is_portable = true; // The program is portable (can be moved)
+        let is_portable = {
+            let path_lower = exe_path.to_string_lossy().to_lowercase();
+            !path_lower.contains("program files")
+                && !path_lower.contains("programdata")
+                && !path_lower.contains("appdata")
+        };
 
         // ALWAYS use AppData for data, regardless of exe location
         let data_dir = {
@@ -41,8 +44,8 @@ impl PortableDetector {
                     .or_else(|_| env::var("APPDATA"))
                     .map(PathBuf::from)
                     .unwrap_or_else(|_| {
-                        // Fallback to user directory
-                        dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
+                        // Fallback to temp directory (safe for scheduled tasks)
+                        dirs::config_dir().unwrap_or_else(|| std::env::temp_dir())
                     })
                     .join("TommyMemoryCleaner")
             }
@@ -50,7 +53,7 @@ impl PortableDetector {
             #[cfg(not(windows))]
             {
                 dirs::config_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
+                    .unwrap_or_else(|| std::env::temp_dir())
                     .join("TommyMemoryCleaner")
             }
         };
@@ -99,9 +102,9 @@ static PORTABLE: Lazy<RwLock<PortableDetector>> = Lazy::new(|| match PortableDet
             is_portable: false,
             exe_path: std::env::current_exe().unwrap_or_else(|err| {
                 tracing::error!("Failed to get exe path: {}, using fallback", err);
-                PathBuf::from(".")
+                std::env::temp_dir()
             }),
-            data_dir: PathBuf::from(".").join("TommyMemoryCleaner"),
+            data_dir: std::env::temp_dir().join("TommyMemoryCleaner"),
         })
     }
 });
@@ -147,13 +150,13 @@ impl Profile {
     pub fn get_memory_areas(&self) -> Areas {
         match self {
             Profile::Normal => {
-                // Profilo Normal: Working Set + Registry Cache + Standby List (Low Priority)
-                // - Liberazione immediata senza latenza percepibile
+                // Normal profile: Working Set + Registry Cache + Standby List (Low Priority)
+                // - Immediate freeing with no perceptible latency
                 // ~540MB Working Set + ~1.86MB Registry Cache
                 // - Uses aggressive optimizations for maximum performance
                 let mut areas = Areas::WORKING_SET | Areas::REGISTRY_CACHE;
-                
-                // Aggiunge Standby List Low Priority se disponibile
+
+                // Add Standby List Low Priority if available
                 if crate::os::has_standby_list_low() {
                     areas |= Areas::STANDBY_LIST_LOW;
                 }
@@ -161,21 +164,21 @@ impl Profile {
                 areas
             }
             Profile::Balanced => {
-                // Profilo Balanced: Include Normal + System File Cache + File Cache + Standby List (Full)
-                // - Refresh profondo del sistema dopo uso intenso
+                // Balanced profile: Includes Normal + System File Cache + File Cache + Standby List (Full)
+                // - Deep system refresh after intensive use
                 // - Uses aggressive optimizations for maximum performance
                 let mut areas = Areas::WORKING_SET | Areas::REGISTRY_CACHE;
-                
-                // Aggiunge aree aggiuntive
+
+                // Add additional areas
                 areas |= Areas::SYSTEM_FILE_CACHE;
                 areas |= Areas::STANDBY_LIST;
-                
-                // Standby List Low Priority se disponibile
+
+                // Standby List Low Priority if available
                 if crate::os::has_standby_list_low() {
                     areas |= Areas::STANDBY_LIST_LOW;
                 }
-                
-                // Modified File Cache se disponibile
+
+                // Modified File Cache if available
                 if crate::os::has_modified_file_cache() {
                     areas |= Areas::MODIFIED_FILE_CACHE;
                 }
@@ -183,19 +186,19 @@ impl Profile {
                 areas
             }
             Profile::Gaming => {
-                // Profilo Gaming: Include Balanced + Modified Page List + Combined Page List
-                // - Reset totale per gaming, tabula rasa della RAM
+                // Gaming profile: Includes Balanced + Modified Page List + Combined Page List
+                // - Total reset for gaming, a clean slate for RAM
                 // - Uses undocumented techniques for maximum performance
                 let mut areas = Areas::WORKING_SET | Areas::REGISTRY_CACHE;
-                
-                // Tutte le aree del profilo Balanced
+
+                // All areas from the Balanced profile
                 areas |= Areas::SYSTEM_FILE_CACHE;
                 areas |= Areas::STANDBY_LIST;
-                
-                // Aree aggiuntive per gaming
+
+                // Additional areas for gaming
                 areas |= Areas::MODIFIED_PAGE_LIST;
-                
-                // Aree dipendenti dalla versione Windows
+
+                // Areas dependent on the Windows version
                 if crate::os::has_standby_list_low() {
                     areas |= Areas::STANDBY_LIST_LOW;
                 }
@@ -255,75 +258,20 @@ impl Default for TrayConfig {
 
 impl TrayConfig {
     fn validate(&mut self) {
-        // If colors are still old defaults (including "cold" ones), update to new balanced ones
-        // Complete list of all old colors to update
-        let old_defaults = [
-            "#1C8C2D", "#15803d", "#34c759", "#28a745", "#2d5a3d", "#3d6b4d", "#1c8c2d", "#15803D",
-            "#34C759", "#28A745", "#2D5A3D", "#3D6B4D",
-            // "Cold" colors that might have been used
-            "#2e7d32", "#388e3c", "#43a047", "#4caf50", "#66bb6a", "#81c784", "#2E7D32", "#388E3C",
-            "#43A047", "#4CAF50", "#66BB6A", "#81C784",
-        ];
-        let old_warning = [
-            "#FF9900", "#ff9500", "#8b6f47", "#b8864d", "#ff9900", "#FF9500", "#8B6F47", "#B8864D",
-            // "Cold" warning colors
-            "#f57c00", "#fb8c00", "#ff9800", "#ffa726", "#ffb74d", "#F57C00", "#FB8C00", "#FF9800",
-            "#FFA726", "#FFB74D",
-        ];
-        let old_danger = [
-            "#CC3300", "#ff3b30", "#dc3545", "#6b2d2d", "#8b3d3d", "#cc3300", "#FF3B30", "#DC3545",
-            "#6B2D2D", "#8B3D3D", // "Cold" danger colors
-            "#c62828", "#d32f2f", "#e53935", "#ef5350", "#e57373", "#C62828", "#D32F2F", "#E53935",
-            "#EF5350", "#E57373",
-        ];
-
-        // Normalize colors for comparison (uppercase without spaces)
-        let bg_normalized = self.background_color_hex.trim().to_uppercase();
-        let warn_normalized = self.warning_color_hex.trim().to_uppercase();
-        let danger_normalized = self.danger_color_hex.trim().to_uppercase();
-
-        // Update only if they are old colors
-        if old_defaults
-            .iter()
-            .any(|&c| c.to_uppercase() == bg_normalized)
-        {
-            self.background_color_hex = "#2d8a3d".to_string();
-        } else {
-            // Normalize format if not an old color
-            self.background_color_hex =
-                Self::normalize_hex_color(&self.background_color_hex, "#2d8a3d");
-        }
-
-        if old_warning
-            .iter()
-            .any(|&c| c.to_uppercase() == warn_normalized)
-        {
-            self.warning_color_hex = "#d97706".to_string();
-        } else {
-            // Normalize format if not an old color
-            self.warning_color_hex = Self::normalize_hex_color(&self.warning_color_hex, "#d97706");
-        }
-
-        if old_danger
-            .iter()
-            .any(|&c| c.to_uppercase() == danger_normalized)
-        {
-            self.danger_color_hex = "#b91c1c".to_string();
-        } else {
-            // Normalize format if not an old color
-            self.danger_color_hex = Self::normalize_hex_color(&self.danger_color_hex, "#b91c1c");
-        }
-
-        // Always normalize text color
+        self.background_color_hex = Self::normalize_hex_color(&self.background_color_hex, "#2d8a3d");
+        self.warning_color_hex = Self::normalize_hex_color(&self.warning_color_hex, "#d97706");
+        self.danger_color_hex = Self::normalize_hex_color(&self.danger_color_hex, "#b91c1c");
         self.text_color_hex = Self::normalize_hex_color(&self.text_color_hex, "#FFFFFF");
 
-        if self.warning_level >= self.danger_level {
-            self.warning_level = 80;
-            self.danger_level = 90;
-        }
-
+        // Clamp values first
         self.warning_level = self.warning_level.clamp(50, 95);
         self.danger_level = self.danger_level.clamp(60, 100);
+        
+        // Then ensure warning_level < danger_level by adjusting warning_level down if needed
+        if self.warning_level >= self.danger_level {
+            // Set warning to 10 points below danger, minimum 50
+            self.warning_level = (self.danger_level - 10).max(50);
+        }
     }
 
     fn normalize_hex_color(color: &str, default: &str) -> String {
@@ -610,7 +558,7 @@ impl Config {
             }
         } else {
             let mut default = Self::default();
-            // FIX: Prova a caricare tutte le impostazioni dall'installer se esiste
+            // FIX: Try to load all settings from the installer if it exists
             if let Some(installer_json) = Self::load_installer_settings() {
                 if let Some(lang) = installer_json.get("language").and_then(|v| v.as_str()) {
                     default.language = lang.to_string();
@@ -694,8 +642,9 @@ impl Config {
                                 error_msg
                             );
                             if attempt < 3 {
+                                // TODO: Use tokio::time::sleep when save() is made async
                                 std::thread::sleep(std::time::Duration::from_millis(
-                                    100 * attempt as u64,
+                                    50 * attempt as u64,
                                 ));
                             }
                         }
@@ -752,7 +701,8 @@ impl Config {
                         error_msg
                     );
                     if attempt < 3 {
-                        std::thread::sleep(std::time::Duration::from_millis(50 * attempt as u64));
+                        // TODO: Use tokio::time::sleep when save() is made async
+                        std::thread::sleep(std::time::Duration::from_millis(30 * attempt as u64));
                     }
                 }
             }
@@ -787,9 +737,10 @@ impl Config {
                         e
                     );
                     if attempt < 3 {
-                        std::thread::sleep(std::time::Duration::from_millis(50 * attempt as u64));
+                        // TODO: Use tokio::time::sleep when save() is made async
+                        std::thread::sleep(std::time::Duration::from_millis(30 * attempt as u64));
                     } else {
-                        // Ultimo tentativo fallito, ripristina backup
+                        // Last attempt failed, restore backup
                         if backup_path.exists() && path.exists() {
                             let _ = fs::copy(&backup_path, &path);
                         }

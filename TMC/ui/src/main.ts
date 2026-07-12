@@ -9,11 +9,11 @@ const app = new App({
   target: document.getElementById('app')!,
 })
 
-// Disable context menu
-document.addEventListener('contextmenu', (e) => {
-  e.preventDefault()
-  return false
-})
+// Disable the default WebView2 context menu (Refresh, Save as, Share, ...)
+// only in production; in dev it stays available for Inspect Element
+if (import.meta.env.PROD) {
+  document.addEventListener('contextmenu', (e) => e.preventDefault())
+}
 
 // Disable dev tools shortcuts only in production
 if (import.meta.env.PROD) {
@@ -32,7 +32,7 @@ if (import.meta.env.PROD) {
   })
 }
 
-// Rimuove il loading
+// Remove the loading state once the app has mounted
 setTimeout(() => {
   document.getElementById('app')?.classList.add('loaded')
 }, 100)
