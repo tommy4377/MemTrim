@@ -1,0 +1,659 @@
+<script lang="ts">
+  import { onMount, onDestroy } from 'svelte'
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+  import { LogicalSize, type PhysicalSize } from '@tauri-apps/api/window'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+  import Titlebar from './components/Titlebar.svelte'
+
+  // Lazy load components for better performance
+  let CompactView: typeof import('./components/CompactView.svelte').default | null = null
+  let FullView: typeof import('./components/FullView.svelte').default | null = null
+
+  // Load components when needed
+  async function loadComponents() {
+    if (!CompactView) {
+      const module = await import('./components/CompactView.svelte')
+      CompactView = module.default
+    }
+    if (!FullView) {
+      const module = await import('./components/FullView.svelte')
+      FullView = module.default
+    }
+  }
+
+  import {
+    initApp,
+    cleanupApp,
+    config,
+    memory,
+    isAppInitialized,
+    updateConfig,
+    getSafeLanguage,
+    stopMemoryRefresh,
+  } from './lib/store'
+  import { applyThemeColors } from './lib/themeManager'
+  import { getConfig, saveConfig } from './lib/api'
+  import { setLanguage } from './i18n/index'
+  import { memoryInfo } from './lib/api'
+  import type { Config } from './lib/types'
+  import { invoke } from '@tauri-apps/api/core'
+
+  // ========== STATE ==========
+  const appWindow = WebviewWindow.getCurrent()
+
+  let cfg: Config | null = null
+  let isCompact = false
+  let isLoading = true
+  let initError: string | null = null
+  let isElevated = true
+  let elevationWarning = ''
+
+  // Subscriptions
+  let configUnsub: (() => void) | null = null
+  let resizeUnlisten: UnlistenFn | null = null
+  let moveUnlisten: UnlistenFn | null = null
+  
+  // Resize listener
+  let handleResize: () => void
+
+  // Window dimensions
+  const WINDOW_SIZES = {
+    full: { width: 500, height: 700 },
+    compact: { width: 420, height: 100 },
+    min: { width: 360, height: 90 },
+    max: { width: 500, height: 700 },
+  } as const
+
+  // ========== LIFECYCLE ==========
+  onMount(async () => {
+    // Log the window size
+    console.log(`Window size: ${window.innerWidth}x${window.innerHeight}px`)
+
+    // 1. Read the initial configuration
+    let currentConfig = await getConfig()
+    
+    // 2. ALWAYS detect platform on every startup for correct border styling
+    // This ensures existing configs get updated if the Windows version changes
+    // or if the previous detection was incorrect
+    try {
+      const platform = await invoke('cmd_get_platform') as string
+      const isWindows10 = platform === 'windows-10'
+      
+      // Only save if changed to avoid unnecessary writes
+      if (currentConfig.is_windows_10 !== isWindows10 || !currentConfig.platform_detected) {
+        await saveConfig({ 
+          platform_detected: true,
+          is_windows_10: isWindows10 
+        })
+        currentConfig = { ...currentConfig, platform_detected: true, is_windows_10: isWindows10 }
+        console.log(`Platform updated: ${platform}`)
+      } else {
+        console.log(`Platform unchanged: ${platform}`)
+      }
+    } catch (error) {
+      console.error('Failed to detect platform:', error)
+    }
+    
+    // Apply theme immediately to avoid flash
+    if (currentConfig) {
+      applyThemeColors(currentConfig)
+    }
+
+    // 3. Set up the window WITH the updated configuration
+    await setupWindow(currentConfig)
+    
+    // 4. Initialize app
+    await initApp()
+    
+    // Force correct size on startup to prevent scrollbars
+    // This fixes the issue where scrollbar appears after setup
+    try {
+      const window = WebviewWindow.getCurrent()
+      // Only set if not already in compact mode (though usually it starts full)
+      if (!currentConfig?.compact_mode) {
+        // FIX: Wait for window animations/init to settle
+        setTimeout(async () => {
+          try {
+            await window.setSize(new LogicalSize(500, 700))
+          } catch (e) { console.warn('Resize failed:', e) }
+        }, 250)
+      }
+    } catch (e) {
+      console.warn('Failed to force window size:', e)
+    }
+
+    isLoading = false
+    initError = null
+
+    // Check elevation status for warning banner
+    await checkElevation()
+
+    // 5. Subscribe to config changes
+    configUnsub = config.subscribe((v) => {
+      cfg = v
+      if (v) handleConfigChange(v)
+    })
+
+    // Apply initial theme
+    if (cfg?.theme) {
+      applyThemeColors(cfg)
+      // Update tray icon with correct theme
+      invoke('cmd_update_tray_theme', { theme: cfg.theme })
+    }
+
+    // Apply initial language
+    if (cfg?.language) {
+      setLanguage(cfg.language as 'en' | 'it' | 'es' | 'fr' | 'pt' | 'de' | 'ar' | 'ja')
+    }
+
+    // Resize listener
+    handleResize = () => {
+      console.log(`Window resized to: ${window.innerWidth}x${window.innerHeight}px`)
+    }
+    window.addEventListener('resize', handleResize)
+
+    // FIX: Function to apply the scrollbar workaround
+    async function applyScrollbarFix() {
+       // Only apply if NOT in compact mode
+       // We check cfg (store) or fetch fresh config to be sure
+       const currentCfg = cfg || await getConfig();
+       
+       if (!currentCfg?.compact_mode) {
+         console.log('Triggering Scrollbar Fix Sequence...');
+         
+         // 1. Force Compact Mode
+         isCompact = true
+         await appWindow.setSize(new LogicalSize(WINDOW_SIZES.compact.width, WINDOW_SIZES.compact.height));
+         
+         // 2. Wait and Revert
+         setTimeout(async () => {
+           isCompact = false
+           await appWindow.setSize(new LogicalSize(WINDOW_SIZES.full.width, WINDOW_SIZES.full.height));
+           await appWindow.center();
+           console.log('Scrollbar Fix Sequence Completed');
+         }, 150);
+       }
+    }
+
+    // Listen for setup-complete event to reload config
+    const setupCompleteUnlisten = await listen('setup-complete', async () => {
+      if (isAppInitialized()) {
+        // Lightweight config reload instead of full re-initialization
+        const newConfig = await getConfig()
+        if (newConfig) {
+          config.set(newConfig)
+        }
+        // Trigger scrollbar fix immediately after setup
+        // Uses a small delay to ensure window visibility
+        setTimeout(() => applyScrollbarFix(), 500);
+      }
+    })
+
+    // Listen for window resize events
+    resizeUnlisten = await listen<PhysicalSize>('tauri://resize', async () => {
+      // Handle resize if needed
+    })
+
+    // Monitor change listener - re-centers on the new monitor when needed
+    const monitorUnlisten = await listen('tauri://window-scale-factor-changed', async () => {
+      await handleMonitorChange()
+    })
+
+    isLoading = false
+  })
+
+  onDestroy(() => {
+    // FIX #10: Full cleanup of all resources
+    if (configUnsub) {
+      configUnsub()
+      configUnsub = null
+    }
+
+    if (resizeUnlisten) {
+      resizeUnlisten()
+      resizeUnlisten = null
+    }
+
+    if (moveUnlisten) {
+      moveUnlisten()
+      moveUnlisten = null
+    }
+    
+    // Remove the resize listener
+    window.removeEventListener('resize', handleResize)
+
+    // Clean up memory refresh and app state
+    stopMemoryRefresh()
+    cleanupApp().catch(console.error)
+  })
+
+  // ========== WINDOW MANAGEMENT ==========
+  async function setupWindow(config: Config) {
+    try {
+      // Show the window in the taskbar
+      await appWindow.setSkipTaskbar(false)
+
+      // Set initial size based on config
+      const startCompact = config?.compact_mode ?? false
+      const size = startCompact ? WINDOW_SIZES.compact : WINDOW_SIZES.full
+      await appWindow.setSize(new LogicalSize(size.width, size.height))
+
+      // Center window
+      await appWindow.center()
+
+      // Set min/max size constraints
+      await appWindow.setMinSize(new LogicalSize(WINDOW_SIZES.min.width, WINDOW_SIZES.min.height))
+      await appWindow.setMaxSize(new LogicalSize(WINDOW_SIZES.max.width, WINDOW_SIZES.max.height))
+
+      // Focus window
+      await appWindow.setFocus()
+    } catch (error) {
+      console.error('Failed to setup window:', error)
+    }
+  }
+
+  async function checkElevation() {
+    try {
+      // cmd_check_elevation performs a live token check and is the single
+      // source of truth. (cmd_is_elevation_required only reflects a flag
+      // captured at process start and can never contradict the token check,
+      // so consulting it first only risked showing a stale banner.)
+      const result = await invoke<any>('cmd_check_elevation')
+      isElevated = result.is_elevated
+      elevationWarning = isElevated
+        ? ''
+        : 'Administrator privileges are required to optimize memory. Please restart as administrator.'
+    } catch (error) {
+      // A transient IPC failure must not produce a scary banner while the
+      // app may well be elevated — log it and keep the current state.
+      console.error('Failed to check elevation:', error)
+    }
+  }
+
+  async function handleConfigChange(newConfig: Config) {
+    const shouldBeCompact = newConfig.compact_mode ?? false
+
+    // Handle compact mode change
+    if (shouldBeCompact !== isCompact) {
+      isCompact = shouldBeCompact
+      await updateWindowSize(isCompact)
+    }
+
+    // Handle always on top
+    if (newConfig.always_on_top !== undefined) {
+      try {
+        await appWindow.setAlwaysOnTop(newConfig.always_on_top)
+      } catch (error) {
+        console.error('Failed to set always on top:', error)
+      }
+    }
+  }
+
+  async function updateWindowSize(compact: boolean) {
+    try {
+      const size = compact ? WINDOW_SIZES.compact : WINDOW_SIZES.full
+
+      // Get current position BEFORE resizing
+      const currentPos = await appWindow.innerPosition()
+
+      // Disable resizing temporarily for smooth transition
+      await appWindow.setResizable(false)
+
+      // Update size - use current position, don't recenter
+      await appWindow.setSize(new LogicalSize(size.width, size.height))
+
+      // Keep window at same top-left position (don't center on every toggle)
+      // This prevents the window from jumping around the screen
+      // Only adjust if going to compact mode (shrink at top)
+      // or expanding (keep same top position)
+
+      // Re-enable resizing for full view
+      if (!compact) {
+        await appWindow.setResizable(false)
+      }
+
+      // No corner reapplication needed here:
+      // - Win11: DWM rounding is a persistent window attribute
+      // - Win10: rounding is pure CSS and scales with the window
+    } catch (error) {
+      console.error('Failed to update window size:', error)
+    }
+  }
+
+  // FIX: Handle monitor change - re-center and ensure proper size
+  async function handleMonitorChange() {
+    try {
+      // Get current position and size
+      const position = await appWindow.innerPosition()
+      const size = await appWindow.innerSize()
+
+      // Get monitor scale factor (DPI awareness)
+      const scaleFactor = await appWindow.scaleFactor()
+
+      // Ensure window is within bounds of current monitor
+      // Tauri should handle this, but we ensure proper centering
+      await appWindow.center()
+
+      // Ensure size is correct for current monitor
+      const currentSize = await appWindow.innerSize()
+      const expectedSize = isCompact ? WINDOW_SIZES.compact : WINDOW_SIZES.full
+
+      // Check if size needs adjustment (accounting for DPI)
+      const logicalWidth = currentSize.width / scaleFactor
+      const logicalHeight = currentSize.height / scaleFactor
+
+      if (
+        Math.abs(logicalWidth - expectedSize.width) > 5 ||
+        Math.abs(logicalHeight - expectedSize.height) > 5
+      ) {
+        // Size mismatch, fix it
+        await appWindow.setSize(new LogicalSize(expectedSize.width, expectedSize.height))
+        await appWindow.center()
+      }
+    } catch (error) {
+      console.error('Failed to handle monitor change:', error)
+    }
+  }
+
+  // ========== ERROR RECOVERY ==========
+  async function retryInit() {
+    // Log the window size
+    console.log(`Window size: ${window.innerWidth}x${window.innerHeight}px`)
+
+    // App initialization
+    try {
+      await initApp()
+      isLoading = false
+      await setupWindow(await getConfig())
+      isLoading = false
+    } catch (error) {
+      console.error('Retry failed:', error)
+      initError = error instanceof Error ? error.message : 'Retry failed'
+      isLoading = false
+    }
+  }
+
+  // ========== KEYBOARD SHORTCUTS ==========
+  async function handleKeydown(event: KeyboardEvent) {
+    // Ctrl+R or F5: Refresh memory info
+    if ((event.ctrlKey && event.key === 'r') || event.key === 'F5') {
+      event.preventDefault()
+      memoryInfo()
+        .then((mem) => memory.set(mem))
+        .catch(console.error)
+    }
+
+    // ESC: Toggle between compact and full mode (works both ways)
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      // Toggle compact mode
+      await updateConfig({ compact_mode: !isCompact })
+    }
+  }
+</script>
+
+<svelte:window on:keydown={handleKeydown} />
+
+<div class="app">
+  {#if isLoading}
+    <!-- Loading State -->
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Initializing MemTrim...</div>
+    </div>
+  {:else if initError}
+    <!-- Error State -->
+    <div class="error">
+      <div class="error-icon">⚠️</div>
+      <div class="error-title">Failed to Initialize</div>
+      <div class="error-message">{initError}</div>
+      <button class="retry-button" on:click={retryInit}> Retry </button>
+    </div>
+  {:else}
+    <!-- Main App -->
+    <Titlebar />
+    {#if elevationWarning && !isCompact}
+      <div class="elevation-warning">
+        <div class="warning-content">
+          <p>{elevationWarning}</p>
+          <button class="elevate-btn" on:click={async () => {
+            try {
+              await invoke('cmd_restart_with_elevation');
+              // On success the backend exits this process and starts the
+              // elevated instance; nothing more to do here.
+            } catch (e) {
+              console.error('Elevation restart failed:', e);
+              const message = String(e);
+              if (message.toLowerCase().includes('cancelled')) {
+                // The user declined the UAC prompt — not an error. Re-check
+                // and keep the standard (non-alarming) warning text.
+                await checkElevation();
+              } else {
+                elevationWarning = `Failed to restart as administrator: ${e}. Please close the app and run it manually as administrator.`;
+              }
+            }
+          }}>
+            Run as Administrator
+          </button>
+        </div>
+      </div>
+    {/if}
+    {#if isCompact}
+      {#await loadComponents() then}
+        <svelte:component this={CompactView} />
+      {:catch error}
+        <div class="error">
+          <div class="error-message">Failed to load CompactView: {error}</div>
+        </div>
+      {/await}
+    {:else}
+      {#await loadComponents() then}
+        <svelte:component this={FullView} />
+      {:catch error}
+        <div class="error">
+          <div class="error-message">Failed to load FullView: {error}</div>
+        </div>
+      {/await}
+    {/if}
+  {/if}
+</div>
+
+<style>
+  :global(html),
+  :global(body),
+  :global(#app) {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    /* DPI-aware anti-aliasing */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    image-rendering: crisp-edges;
+    /* Set by the backend via cmd_get_window_config: 16px on Win10 (CSS-drawn corners),
+       0px on Win11 (DWM rounds the window natively) */
+    border-radius: var(--window-border-radius, 16px);
+    /* Ensure no positioning issues */
+    position: relative;
+    top: 0;
+    left: 0;
+  }
+
+  /* Remove any visible borders on Windows 10 */
+  :global(body) {
+    border: none !important;
+    outline: none !important;
+  }
+
+  :global(body) {
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable', Roboto, Oxygen, Ubuntu,
+      Cantarell, 'Helvetica Neue', sans-serif;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :global(*) {
+    box-sizing: border-box;
+  }
+
+  .app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden;
+    position: relative;
+    animation: fadeIn 0.2s ease;
+    /* Platform-aware radius from the backend (16px Win10 / 0px Win11) */
+    border-radius: var(--window-border-radius, 16px);
+    /* Ensure content stays within rounded bounds */
+    border: 1px solid transparent;
+    /* Remove any margins to ensure full window coverage */
+    margin: 0;
+    padding: 0;
+    /* Add padding-top to account for fixed titlebar using CSS variable */
+    padding-top: var(--titlebar-height, 32px);
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .loading,
+  .error {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    text-align: center;
+  }
+
+  .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--bar-track);
+    border-top-color: var(--btn-bg);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-text {
+    font-size: 14px;
+    opacity: 0.8;
+  }
+
+  .error-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    color: #ff5f57;
+  }
+
+  .error-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .error-message {
+    font-size: 13px;
+    opacity: 0.8;
+    margin-bottom: 16px;
+    max-width: 300px;
+  }
+
+  .retry-button {
+    padding: 8px 24px;
+    background: var(--btn-bg);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .retry-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .retry-button:active {
+    transform: translateY(0);
+  }
+
+  .elevation-warning {
+    background: linear-gradient(135deg, rgba(220, 120, 50, 0.1) 0%, rgba(220, 100, 30, 0.05) 100%);
+    border: 1px solid rgba(220, 120, 50, 0.3);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 4px 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .warning-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .warning-content p {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  .elevation-warning .elevate-btn {
+    background: linear-gradient(135deg, #dc7832 0%, #d86420 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+    width: fit-content;
+  }
+
+  .elevation-warning .elevate-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 120, 50, 0.3);
+  }
+
+  .elevation-warning .elevate-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(220, 120, 50, 0.2);
+  }
+</style>
