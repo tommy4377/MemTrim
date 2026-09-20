@@ -112,7 +112,7 @@ Output: TMC/src-tauri/target/release/TommyMemoryCleaner.exe
 Maintained by @tommy4377.
 """
 def prep(tag,hi):
- b=W/"TMC"; noup(b); ver(b,tag[1:]); wr(W/"README.md",readme(tag,hi)); wr(W/".github/workflows/release.yml",workflow("TMC","TommyMemoryCleaner.exe","Tommy Memory Cleaner"))
+ b=W/"TMC"; noup(b); ver(b,tag[1:]); wr(W/"README.md",readme(tag,hi)); shutil.rmtree(W/".github/workflows",ignore_errors=True)
 def final():
  old=W/"TMC"; new=W/"MemTrim"; old.rename(new)
  for p in W.rglob("*"):
@@ -182,8 +182,8 @@ No open-source license is granted yet. A project-wide license can be added after
  wr(W/".github/ISSUE_TEMPLATE/feature_request.yml",'name: Feature request\ndescription: Suggest an improvement\ntitle: "[Feature]: "\nlabels: ["enhancement"]\nbody:\n  - type: textarea\n    id: usecase\n    attributes: {label: Problem or use case}\n    validations: {required: true}\n  - type: textarea\n    id: proposal\n    attributes: {label: Proposed solution}\n    validations: {required: true}\n')
  wr(W/".github/dependabot.yml","version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /MemTrim/ui\n    schedule: {interval: weekly}\n  - package-ecosystem: cargo\n    directory: /MemTrim/src-tauri\n    schedule: {interval: weekly}\n  - package-ecosystem: github-actions\n    directory: /\n    schedule: {interval: weekly}\n")
  wr(W/".github/workflows/ci.yml","name: CI\non:\n  push: {branches: [main]}\n  pull_request: {branches: [main]}\npermissions: {contents: read}\njobs:\n  validate:\n    runs-on: windows-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: {node-version: 20}\n      - working-directory: MemTrim/ui\n        run: npm install\n      - working-directory: MemTrim/ui\n        run: npm run check\n      - working-directory: MemTrim/ui\n        run: npm run build\n      - working-directory: MemTrim/src-tauri\n        run: cargo fmt --check\n      - working-directory: MemTrim/src-tauri\n        run: cargo check\n")
- wr(W/".github/workflows/release.yml",workflow("MemTrim","MemTrim.exe","MemTrim"))
- shutil.rmtree(W/".github/scripts",ignore_errors=True); (W/".github/workflows/rebuild-history.yml").unlink(missing_ok=True)
+ shutil.rmtree(W/".github/workflows",ignore_errors=True)
+ shutil.rmtree(W/".github/scripts",ignore_errors=True)
 def tree():
  e={"GIT_INDEX_FILE":str(IDX),"GIT_WORK_TREE":str(W)}; run("git","add","-A",env=e); return run("git","write-tree",env=e,cap=True).stdout.strip()
 def commit(t,parent,msg,who):
