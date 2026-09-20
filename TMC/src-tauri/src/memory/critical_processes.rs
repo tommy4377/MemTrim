@@ -163,7 +163,7 @@ static CRITICAL_PROCESSES: Lazy<HashSet<String>> = Lazy::new(|| {
 
     // Current Process
     // Our own process!
-    set.insert("tommymemorycleaner.exe".to_string());
+    set.insert("memtrim.exe".to_string());
     set.insert("tmc.exe".to_string());
 
     set

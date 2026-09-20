@@ -10,7 +10,7 @@
   - Dynamic border coloring based on theme
   - Smooth animations and transitions
   
-  @author Tommy Memory Cleaner
+  @author MemTrim
   @version 2.2.0
 -->
 <script lang="ts">

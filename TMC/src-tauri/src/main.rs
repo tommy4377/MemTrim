@@ -3,9 +3,9 @@
     windows_subsystem = "windows"
 )]
 
-/// Tommy Memory Cleaner - Main Application Entry Point
+/// MemTrim - Main Application Entry Point
 ///
-/// This is the main entry point for the Tommy Memory Cleaner application.
+/// This is the main entry point for the MemTrim application.
 /// It initializes all subsystems including:
 /// - Memory optimization engine
 /// - System tray integration
@@ -123,8 +123,8 @@ fn reacquire_single_instance_mutex() {
     }
 
     // Same name/fallback strategy as the acquisition in main()
-    let global_name = to_wide("Global\\TommyMemoryCleaner_SingleInstance");
-    let local_name = to_wide("TommyMemoryCleaner_SingleInstance");
+    let global_name = to_wide("Global\\MemTrim_SingleInstance");
+    let local_name = to_wide("MemTrim_SingleInstance");
 
     let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, global_name.as_ptr()) };
     let handle = if handle.is_null() && unsafe { GetLastError() } == ERROR_ACCESS_DENIED {
@@ -892,7 +892,7 @@ fn check_webview2() {
                     MessageBoxW, MB_ICONERROR, MB_OK,
                 };
 
-                let title = to_wide("Tommy Memory Cleaner - WebView2 Required");
+                let title = to_wide("MemTrim - WebView2 Required");
                 let msg = to_wide(
                     "WebView2 Runtime is required to run this application.\n\n\
                                   Please download and install it from:\n\
@@ -936,8 +936,8 @@ fn main() {
         // Try Global\ prefix first (works across sessions when running elevated).
         // If that fails with ERROR_ACCESS_DENIED (standard user without SeCreateGlobalPrivilege),
         // fall back to a session-local mutex name (bare name without Global\ prefix).
-        let global_name = to_wide("Global\\TommyMemoryCleaner_SingleInstance");
-        let local_name = to_wide("TommyMemoryCleaner_SingleInstance");
+        let global_name = to_wide("Global\\MemTrim_SingleInstance");
+        let local_name = to_wide("MemTrim_SingleInstance");
 
         let handle = unsafe {
             CreateMutexW(std::ptr::null_mut(), 1, global_name.as_ptr())
@@ -961,11 +961,11 @@ fn main() {
                 unsafe { CloseHandle(handle) };
             }
 
-            tracing::warn!("Another instance of Tommy Memory Cleaner is already running. Exiting.");
+            tracing::warn!("Another instance of MemTrim is already running. Exiting.");
 
-            let title = to_wide("Tommy Memory Cleaner");
+            let title = to_wide("MemTrim");
             let msg = to_wide(
-                "Another instance of Tommy Memory Cleaner is already running.\n\n\
+                "Another instance of MemTrim is already running.\n\n\
                  The application will now exit.",
             );
             unsafe {
@@ -1099,7 +1099,7 @@ fn main() {
         use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 
-        let app_id = "TommyMemoryCleaner";
+        let app_id = "MemTrim";
         let app_id_wide: Vec<u16> = OsStr::new(app_id).encode_wide().chain(Some(0)).collect();
 
         unsafe {
@@ -1465,7 +1465,7 @@ fn main() {
                 let setup_url = WebviewUrl::App("setup.html".into());
                 let app_clone = app_handle.clone();
                 match WebviewWindowBuilder::new(&app_clone, "setup", setup_url)
-                    .title("Tommy Memory Cleaner - Setup")
+                    .title("MemTrim - Setup")
                     .inner_size(500.0, 600.0)
                     .min_inner_size(380.0, 500.0)
                     .max_inner_size(500.0, 600.0)
@@ -1678,8 +1678,8 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .map_err(|e| {
-            tracing::error!("Failed to run TMC application: {:?}", e);
-            eprintln!("FATAL ERROR: Failed to run TMC application: {:?}", e);
+            tracing::error!("Failed to run MemTrim application: {:?}", e);
+            eprintln!("FATAL ERROR: Failed to run MemTrim application: {:?}", e);
             e
         })
         .unwrap_or_else(|e| {

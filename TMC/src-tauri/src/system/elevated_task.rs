@@ -4,7 +4,7 @@ use crate::config::get_portable_detector;
 use tracing::{info, error, warn};
 
 /// Task name for elevated execution
-const ELEVATED_TASK_NAME: &str = "TommyMemoryCleanerElevated";
+const ELEVATED_TASK_NAME: &str = "MemTrimElevated";
 
 /// Creates an elevated scheduled task that can run the app without UAC prompt.
 ///

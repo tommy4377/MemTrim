@@ -9,9 +9,9 @@ use windows_sys::Win32::Foundation::{GetLastError, HANDLE};
 use windows_sys::Win32::System::EventLog::*;
 use windows_sys::Win32::System::Registry::*;
 
-const EVENT_SOURCE: &str = "TommyMemoryCleaner";
+const EVENT_SOURCE: &str = "MemTrim";
 const REGISTRY_PATH: &str =
-    r"SYSTEM\CurrentControlSet\Services\EventLog\Application\TommyMemoryCleaner";
+    r"SYSTEM\CurrentControlSet\Services\EventLog\Application\MemTrim";
 
 // Event IDs for different event types
 const EVENT_ID_STARTUP: u32 = 100;
@@ -278,7 +278,7 @@ pub fn log_startup_event(version: &str, config_loaded: bool) {
     };
 
     let message = format!(
-        "Tommy Memory Cleaner Started\nVersion: {}\nConfiguration: {}\nProcess ID: {}\nExecutable: {}\nTimestamp: {}",
+        "MemTrim Started\nVersion: {}\nConfiguration: {}\nProcess ID: {}\nExecutable: {}\nTimestamp: {}",
         version,
         if config_loaded { "Loaded successfully" } else { "Using defaults" },
         std::process::id(),
@@ -292,7 +292,7 @@ pub fn log_startup_event(version: &str, config_loaded: bool) {
 /// Logs application shutdown
 pub fn log_shutdown_event() {
     let message = format!(
-        "Tommy Memory Cleaner Shutdown\n\
+        "MemTrim Shutdown\n\
         =====================================\n\
         Process ID: {}\n\
         Timestamp: {}",
@@ -374,7 +374,7 @@ pub fn log_auto_optimization_event(reason: &str, threshold: u8) {
 /// Logs a generic error
 pub fn log_error_event(error: &str) {
     let message = format!(
-        "Tommy Memory Cleaner Error\n\
+        "MemTrim Error\n\
         =====================================\n\
         Error: {}\n\
         Timestamp: {}",

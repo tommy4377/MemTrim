@@ -132,19 +132,19 @@ pub fn show_windows_notification(
     );
 
     // ── Attempt 1: winrt-notification with our AppUserModelID (PRIMARY) ──
-    // "TommyMemoryCleaner" must match both SetCurrentProcessExplicitAppUserModelID
+    // "MemTrim" must match both SetCurrentProcessExplicitAppUserModelID
     // in main.rs and the HKCU\Software\Classes\AppUserModelId registration, so
-    // Windows shows the DisplayName "Tommy Memory Cleaner" and the registered icon.
+    // Windows shows the DisplayName "MemTrim" and the registered icon.
     tracing::debug!("Attempt 1: winrt-notification with registered AUMID (PRIMARY)...");
     {
         use winrt_notification::{IconCrop, Toast};
 
         let icon_path = ensure_notification_icon_available();
 
-        let mut toast = Toast::new("TommyMemoryCleaner").title(title).text1(body);
+        let mut toast = Toast::new("MemTrim").title(title).text1(body);
 
         if let Some(ref path) = icon_path {
-            toast = toast.icon(path, IconCrop::Square, "Tommy Memory Cleaner");
+            toast = toast.icon(path, IconCrop::Square, "MemTrim");
         }
 
         match toast.show() {
@@ -161,7 +161,7 @@ pub fn show_windows_notification(
         // missing or unreadable) — retry once without the icon before giving up.
         if icon_path.is_some() {
             tracing::debug!("Retrying winrt-notification without icon...");
-            match Toast::new("TommyMemoryCleaner").title(title).text1(body).show() {
+            match Toast::new("MemTrim").title(title).text1(body).show() {
                 Ok(_) => {
                     tracing::info!("✓ Notification sent via winrt-notification (no icon)");
                     return Ok(());
@@ -239,7 +239,7 @@ pub fn register_app_for_notifications() {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::Registry::{RegSetValueExW, HKEY_CURRENT_USER, REG_SZ};
 
-    let _app_id = "TommyMemoryCleaner";
+    let _app_id = "MemTrim";
     // Use to_string_lossy() to correctly handle paths with Unicode characters
     let exe_path = std::env::current_exe()
         .unwrap_or_default()
@@ -253,9 +253,9 @@ pub fn register_app_for_notifications() {
 
     // Register AppUserModelID in the registry with DisplayName and IconUri
     // IMPORTANT: Windows requires this registration to happen BEFORE any notification
-    // WE USE "TommyMemoryCleaner" as the AppUserModelID to show a user-friendly name in notifications
-    let key_path = r"Software\Classes\AppUserModelId\TommyMemoryCleaner";
-    let display_name = "Tommy Memory Cleaner";
+    // WE USE "MemTrim" as the AppUserModelID to show a user-friendly name in notifications
+    let key_path = r"Software\Classes\AppUserModelId\MemTrim";
+    let display_name = "MemTrim";
 
     // Recursively delete the existing key to force re-creation (useful if it was modified)
     // Use SHDeleteKey to also remove subkeys

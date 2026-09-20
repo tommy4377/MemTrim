@@ -55,7 +55,6 @@ export interface Config {
   always_on_top: boolean
   auto_opt_interval_hours: number
   auto_opt_free_threshold: number
-  auto_update: boolean
 
   close_after_opt: boolean
   minimize_to_tray: boolean

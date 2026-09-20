@@ -400,7 +400,7 @@
     <!-- Loading State -->
     <div class="loading">
       <div class="loading-spinner"></div>
-      <div class="loading-text">Initializing Tommy Memory Cleaner...</div>
+      <div class="loading-text">Initializing MemTrim...</div>
     </div>
   {:else if initError}
     <!-- Error State -->

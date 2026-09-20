@@ -1,10 +1,10 @@
 [package]
-name = "TommyMemoryCleaner"
-version = "4.0.0"
+name = "memtrim"
+version = "5.0.0"
 edition = "2021"
 publish = false
-authors = ["tommy437"]
-description = "Advanced Memory Optimization Tool"
+authors = ["Tommy437"]
+description = "Portable memory optimization utility for Windows"
 
 # Windows resource file for version info
 build = "build.rs"
@@ -125,14 +125,9 @@ strip = true
 # (productName, bundle.publisher, bundle.copyright); OriginalFilename is only
 # settable here.
 [package.metadata.tauri-winres]
-OriginalFilename = "TommyMemoryCleaner.exe"
-ProductName = "Tommy Memory Cleaner"
-CompanyName = "Tommy Memory Cleaner"
-FileDescription = "Advanced Memory Optimization Tool for Windows"
-LegalCopyright = "© 2025 Tommy Memory Cleaner. All rights reserved."
+OriginalFilename = "MemTrim.exe"
+ProductName = "MemTrim"
+CompanyName = "Tommy437"
+FileDescription = "Portable memory optimization utility for Windows"
+LegalCopyright = "© 2026 Tommy437. All rights reserved."
 
-[package.metadata.tauri]
-[package.metadata.tauri.windows]
-certificateThumbprint = "914A6D19C259888AD1F0CFFFFBD0C2054D33EE9E"
-digestAlgorithm = "sha256"
-timestampUrl = "http://timestamp.digicert.com"

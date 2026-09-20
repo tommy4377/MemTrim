@@ -1,7 +1,7 @@
 {
-  "name": "tmc-ui",
+  "name": "memtrim-ui",
   "private": true,
-  "version": "4.0.0",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,8 +20,7 @@
     "@floating-ui/dom": "^1.7.4",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
-    "@tauri-apps/plugin-notification": "^2.0.0",
-    "@tauri-apps/plugin-process": "^2.0.0"
+    "@tauri-apps/plugin-notification": "^2.0.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.0.0",

@@ -47,14 +47,14 @@ impl PortableDetector {
                         // Fallback to temp directory (safe for scheduled tasks)
                         dirs::config_dir().unwrap_or_else(|| std::env::temp_dir())
                     })
-                    .join("TommyMemoryCleaner")
+                    .join("MemTrim")
             }
 
             #[cfg(not(windows))]
             {
                 dirs::config_dir()
                     .unwrap_or_else(|| std::env::temp_dir())
-                    .join("TommyMemoryCleaner")
+                    .join("MemTrim")
             }
         };
 
@@ -104,7 +104,7 @@ static PORTABLE: Lazy<RwLock<PortableDetector>> = Lazy::new(|| match PortableDet
                 tracing::error!("Failed to get exe path: {}, using fallback", err);
                 std::env::temp_dir()
             }),
-            data_dir: std::env::temp_dir().join("TommyMemoryCleaner"),
+            data_dir: std::env::temp_dir().join("MemTrim"),
         })
     }
 });
@@ -294,7 +294,6 @@ pub struct Config {
     pub compact_mode: bool,
     pub auto_opt_interval_hours: u32,
     pub auto_opt_free_threshold: u8,
-    pub auto_update: bool,
     pub font_size: f32,
     pub language: String,
     pub theme: String,
@@ -367,7 +366,6 @@ impl Default for Config {
             compact_mode: false,
             auto_opt_interval_hours: 1,
             auto_opt_free_threshold: 30,
-            auto_update: true,
             font_size: 13.0,
             language: "en".to_string(),
             theme: "dark".to_string(),
@@ -490,13 +488,13 @@ impl Config {
 
     fn load_installer_settings() -> Option<serde_json::Value> {
         // Try to read all settings from the configuration file created by the installer
-        // The installer saves in {userappdata}\TommyMemoryCleaner\config.json
+        // The installer saves in {userappdata}\MemTrim\config.json
         #[cfg(windows)]
         {
             use std::env;
             if let Ok(appdata) = env::var("APPDATA") {
                 let installer_config = std::path::PathBuf::from(appdata)
-                    .join("TommyMemoryCleaner")
+                    .join("MemTrim")
                     .join("config.json");
                 if let Ok(content) = fs::read_to_string(&installer_config) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -779,3 +777,4 @@ impl Config {
         self.config_version = 2;
     }
 }
+

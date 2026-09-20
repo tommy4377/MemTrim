@@ -91,15 +91,7 @@
       {$t('Always on top')}
     </label>
   </div>
-
-  <div class="row">
-    <label>
-      <input type="checkbox" checked={cfg?.auto_update} on:change={() => toggle('auto_update')} />
-      {$t('Auto update')}
-    </label>
-  </div>
-
-  <div class="row">
+<div class="row">
     <label>
       <input
         type="checkbox"

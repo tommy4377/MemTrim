@@ -1,7 +1,7 @@
 {
-  "productName": "Tommy Memory Cleaner",
-  "version": "4.0.0",
-  "identifier": "TommyMemoryCleaner",
+  "productName": "MemTrim",
+  "version": "5.0.0",
+  "identifier": "com.tommy4377.memtrim",
   "build": {
     "beforeDevCommand": {
       "script": "npm run dev",
@@ -18,7 +18,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Tommy Memory Cleaner",
+        "title": "MemTrim",
         "width": 500,
         "height": 700,
         "minWidth": 390,
@@ -44,7 +44,7 @@
     }
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": [],
     "icon": [
       "icons/32x32.png",
@@ -57,11 +57,11 @@
       "../ui/dist/tray.html"
     ],
     "externalBin": [],
-    "publisher": "Tommy Memory Cleaner",
-    "copyright": "© 2025 Tommy Memory Cleaner. All rights reserved.",
+    "publisher": "Tommy437",
+    "copyright": "© 2026 Tommy437. All rights reserved.",
     "category": "Utility",
-    "shortDescription": "Advanced memory optimization tool",
-    "longDescription": "Tommy Memory Cleaner - Professional memory optimization utility for Windows",
+    "shortDescription": "Portable memory optimization utility",
+    "longDescription": "MemTrim - portable memory optimization utility for Windows",
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
@@ -70,10 +70,6 @@
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
-      },
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "installMode": "perMachine"
       }
     }
   },

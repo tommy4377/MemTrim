@@ -92,11 +92,11 @@ fn exe_path() -> Result<PathBuf> {
 }
 
 fn task_name() -> &'static str {
-    "TommyMemoryCleanerAutoStart"
+    "MemTrimAutoStart"
 }
 
 fn app_name() -> &'static str {
-    "Tommy Memory Cleaner"
+    "MemTrim"
 }
 
 /// Properly escape a string for safe inclusion in XML content.
@@ -130,7 +130,7 @@ fn set_portable_startup(enable: bool) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Cannot find user data directory"))?
         .join(r"Microsoft\Windows\Start Menu\Programs\Startup");
 
-    let shortcut_path = startup_folder.join("TommyMemoryCleaner.lnk");
+    let shortcut_path = startup_folder.join("MemTrim.lnk");
 
     if enable {
         // Create the folder if it doesn't exist
@@ -164,7 +164,7 @@ fn set_portable_startup(enable: bool) -> Result<()> {
         );
         link.set_icon_location(Some(icon_path.to_string_lossy().to_string()));
         link.set_name(Some(
-            "Tommy Memory Cleaner - Memory Optimization Tool".to_string(),
+            "MemTrim - Memory Optimization Tool".to_string(),
         ));
         link.create_lnk(&shortcut_path)
             .map_err(|e| anyhow::anyhow!("Failed to create startup shortcut: {:?}", e))?;
@@ -326,8 +326,8 @@ fn set_task_scheduler_startup(exe_path: &str, enable: bool) -> Result<()> {
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Date>2025-01-01T00:00:00</Date>
-    <Author>Tommy Memory Cleaner</Author>
-    <Description>Tommy Memory Cleaner - Auto Start on Login</Description>
+    <Author>MemTrim</Author>
+    <Description>MemTrim - Auto Start on Login</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
@@ -485,7 +485,7 @@ pub fn is_startup_enabled() -> bool {
         if let Some(data_dir) = dirs::data_dir() {
             let shortcut_path = data_dir
                 .join(r"Microsoft\Windows\Start Menu\Programs\Startup")
-                .join("TommyMemoryCleaner.lnk");
+                .join("MemTrim.lnk");
             return shortcut_path.exists();
         }
     } else {

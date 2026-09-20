@@ -1,7 +1,7 @@
 use crate::config::Priority;
 use tauri::{AppHandle, State};
 
-/// System configuration commands for the Tommy Memory Cleaner application.
+/// System configuration commands for the MemTrim application.
 ///
 /// This module provides Tauri commands to manage system-level settings
 /// including process priority, startup behavior, and window properties.

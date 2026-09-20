@@ -1,4 +1,4 @@
-# Rustfmt configuration for Tommy Memory Cleaner
+# Rustfmt configuration for MemTrim
 # Ensures consistent code formatting across the project
 
 # Edition to use

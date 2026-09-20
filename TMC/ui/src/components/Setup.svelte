@@ -284,12 +284,12 @@
 </script>
 
 <div class="setup-container" class:windows-10={isWindows10}>
-  <Titlebar title="Tommy Memory Cleaner - Setup" onClose={handleClose} />
+  <Titlebar title="MemTrim - Setup" onClose={handleClose} />
   
   <div class="setup-content">
     <div class="setup-header">
-      <h1>{$t('Welcome to Tommy Memory Cleaner')}</h1>
-      <img src="/icon.png" alt="Tommy Memory Cleaner" class="app-icon" />
+      <h1>{$t('Welcome to MemTrim')}</h1>
+      <img src="/icon.png" alt="MemTrim" class="app-icon" />
     </div>
 
     {#if elevationWarning}

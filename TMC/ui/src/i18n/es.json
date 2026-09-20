@@ -6,16 +6,13 @@
   "Optimizing...": "Optimizando...",
   "Ready": "Listo",
   "Done": "Hecho",
-
   "Physical": "Física",
   "Free": "Libre",
   "Commit": "Virtual",
-
   "Open TMC": "Abrir TMC",
   "Dashboard": "Panel",
   "Optimize Memory": "Optimizar Memoria",
   "Exit": "Salir",
-
   "Working Set": "Conjunto de Trabajo",
   "Modified Pages": "Páginas Modificadas",
   "Standby List": "Lista de Espera",
@@ -24,37 +21,29 @@
   "Combined Pages": "Páginas Combinadas",
   "File Cache": "Caché de Archivos",
   "Registry Cache": "Caché del Registro",
-
   "Normal": "Normal",
   "Balanced": "Equilibrado",
   "Gaming": "Gaming",
-
   "Full view": "Vista completa",
   "Compact view": "Vista compacta",
   "Minimize": "Minimizar",
   "Minimize to tray": "Minimizar a la bandeja",
   "Close": "Cerrar",
-
   "Process Exclusions": "Exclusiones de Procesos",
   "These processes will not have their memory optimized": "Estos procesos no tendrán su memoria optimizada",
   "Type process name...": "Escriba el nombre del proceso...",
   "Add": "Añadir",
-
   "Auto optimize every": "Auto-optimizar cada",
   "hours": "horas",
   "When free RAM below": "Cuando RAM libre por debajo de",
   "Disabled": "Desactivado",
   "Will optimize every X hours": "Se optimizará cada %hours% horas",
   "5 minute cooldown between optimizations": "5 minutos de espera entre optimizaciones",
-
   "Always on top": "Always on top",
-  "Auto update": "Auto update",
-
-  "TMC • Optimization completed": "TMC • Optimización completada",
-  "TMC • Scheduled optimization": "TMC • Optimización programada",
-  "TMC • Low memory optimization": "TMC • Optimización por memoria baja",
-  "TMC • Hotkey optimization": "TMC • Optimización hotkey",
-
+  "TMC • Optimization completed": "MemTrim • Optimización completada",
+  "TMC • Scheduled optimization": "MemTrim • Optimización programada",
+  "TMC • Low memory optimization": "MemTrim • Optimización por memoria baja",
+  "TMC • Hotkey optimization": "MemTrim • Optimización hotkey",
   "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ Liberado: %.1f MB\n🧠 RAM libre: %.2f GB\n🎯 Perfil: %s",
   "RAM: %d%": "RAM: %d%",
   "Close after optimization": "Cerrar después de optimizar",
@@ -62,21 +51,17 @@
   "Show optimization notifications": "Mostrar notificaciones de optimización",
   "Run on startup": "Ejecutar al inicio",
   "Request administrator privileges on startup": "Solicitar privilegios de administrador al inicio",
-
   "Priority": "Prioridad",
   "Low": "Baja",
   "High": "Alta",
-
   "Language": "Idioma",
   "Theme": "Tema",
   "Light": "Claro",
   "Dark": "Oscuro",
-
   "Global Hotkey": "Atajo Global",
   "Key (A-Z, 0-9, F1-F12)": "Tecla (A-Z, 0-9, F1-F12)",
   "Default": "Predeterminado",
   "Apply": "Aplicar",
-
   "Tray Icon Settings": "Configuración del Icono de Bandeja",
   "Show memory percentage in tray icon": "Mostrar porcentaje de memoria en el icono",
   "Transparent background (numbers only)": "Fondo transparente (solo números)",
@@ -84,20 +69,16 @@
   "Background": "Fondo",
   "Warning": "Advertencia",
   "Danger": "Peligro",
-
   "Main Color": "Color Principal",
   "Color": "Color",
   "Reset": "Restablecer",
   "Reset Colors": "Restablecer Colores",
   "This color will be used for buttons, progress bars, and accents throughout the app": "Este color se usará para botones, barras de progreso y acentos en toda la aplicación",
-
   "Active areas": "Áreas activas",
-
-  "Welcome to Tommy Memory Cleaner": "Bienvenido a Tommy Memory Cleaner",
+  "Welcome to Tommy Memory Cleaner": "Bienvenido a MemTrim",
   "Complete Setup": "Completar Configuración",
   "Saving...": "Guardando...",
   "Run on Windows startup": "Ejecutar al iniciar Windows",
-  
   "Memory Freed": "Memoria Liberada",
   "Since installation": "Desde la instalación",
   "Total freed": "Total liberado",

@@ -1,4 +1,4 @@
-name: Portable release
+name: MemTrim portable release
 
 on:
   push:
@@ -14,22 +14,28 @@ jobs:
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
       - name: Cache Rust build artifacts
         uses: swatinem/rust-cache@v2
         with:
           workspaces: TMC/src-tauri -> target
+
       - name: Install frontend dependencies
         working-directory: TMC/ui
         run: npm install
-      - name: Build portable executable only
+
+      - name: Build MemTrim portable executable only
         working-directory: TMC
         run: npx --yes @tauri-apps/cli@2 build --no-bundle
+
       - name: Prepare portable asset
         shell: pwsh
         run: |
@@ -37,11 +43,12 @@ jobs:
           $exe = Get-ChildItem -Path 'TMC/src-tauri/target/release' -File -Filter '*.exe' |
             Sort-Object Length -Descending |
             Select-Object -First 1
-          if (-not $exe) { throw 'Portable executable not found' }
-          Copy-Item $exe.FullName "dist/MemoryCleaner-${{ github.ref_name }}-portable.exe"
+          if (-not $exe) { throw 'MemTrim executable not found' }
+          Copy-Item $exe.FullName "dist/MemTrim-${{ github.ref_name }}-portable.exe"
+
       - name: Publish portable release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MemoryCleaner-${{ github.ref_name }}-portable.exe
+          files: dist/MemTrim-${{ github.ref_name }}-portable.exe
           generate_release_notes: true
           fail_on_unmatched_files: true

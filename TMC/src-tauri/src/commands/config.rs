@@ -167,7 +167,6 @@ pub fn cmd_save_config(
         update_bool!(always_on_top);
         update_bool!(minimize_to_tray);
         update_bool!(show_opt_notifications);
-        update_bool!(auto_update);
         update_bool!(close_after_opt);
         update_bool!(request_elevation_on_startup);
         // Setup completed - important to prevent setup from opening multiple times
@@ -465,7 +464,7 @@ pub fn cmd_complete_setup(
             "main",
             tauri::WebviewUrl::App("index.html".into()),
         )
-        .title("Tommy Memory Cleaner")
+        .title("MemTrim")
         .inner_size(500.0, 700.0)
         .resizable(false)
         .decorations(false)
@@ -598,3 +597,4 @@ pub fn cmd_complete_setup(
 
     Ok(())
 }
+

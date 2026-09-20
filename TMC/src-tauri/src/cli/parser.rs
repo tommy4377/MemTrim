@@ -68,8 +68,8 @@ pub fn run_console_mode(args: &[String]) {
             "/?" | "/help" | "-h" | "--help" => {
                 #[cfg(windows)]
                 {
-                    console_print("Tommy Memory Cleaner - Console Mode\n\n");
-                    console_print("Usage: TommyMemoryCleaner.exe [OPTIONS]\n\n");
+                    console_print("MemTrim - Console Mode\n\n");
+                    console_print("Usage: MemTrim.exe [OPTIONS]\n\n");
                     console_print("Options:\n");
                     console_print("  /WorkingSet              Optimize Working Set\n");
                     console_print("  /ModifiedPageList        Optimize Modified Page List\n");
@@ -86,14 +86,14 @@ pub fn run_console_mode(args: &[String]) {
                     console_print("  /Profile:Gaming          Use Gaming profile\n");
                     console_print("  /?                       Show this help\n\n");
                     console_print("Examples:\n");
-                    console_print("  TommyMemoryCleaner.exe /WorkingSet /StandbyList\n");
-                    console_print("  TommyMemoryCleaner.exe /Profile:Balanced\n");
+                    console_print("  MemTrim.exe /WorkingSet /StandbyList\n");
+                    console_print("  MemTrim.exe /Profile:Balanced\n");
                 }
                 #[cfg(not(windows))]
                 {
-                    println!("Tommy Memory Cleaner - Console Mode");
+                    println!("MemTrim - Console Mode");
                     println!();
-                    println!("Usage: TommyMemoryCleaner.exe [OPTIONS]");
+                    println!("Usage: MemTrim.exe [OPTIONS]");
                     println!();
                     println!("Options:");
                     println!("  /WorkingSet              Optimize Working Set");
@@ -110,8 +110,8 @@ pub fn run_console_mode(args: &[String]) {
                     println!("  /?                       Show this help");
                     println!();
                     println!("Examples:");
-                    println!("  TommyMemoryCleaner.exe /WorkingSet /StandbyList");
-                    println!("  TommyMemoryCleaner.exe /Profile:Balanced");
+                    println!("  MemTrim.exe /WorkingSet /StandbyList");
+                    println!("  MemTrim.exe /Profile:Balanced");
                 }
                 return;
             }

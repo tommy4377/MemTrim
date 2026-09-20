@@ -9,7 +9,7 @@
   const appWindow = WebviewWindow.getCurrent()
   const dispatch = createEventDispatcher()
 
-  export let title: string = 'Tommy Memory Cleaner'
+  export let title: string = 'MemTrim'
   export let onClose: (() => void) | null = null
 
   let cfg: Config | null = null
@@ -232,7 +232,7 @@
   <!-- Mouse events bubble to the .titlebar handlers above; attaching them
        here too would double-fire (a double toggleMaximize cancels itself) -->
   <div class="draggable" role="none">
-    <img class="logo" src="/icon.png" alt="Tommy Memory Cleaner" />
+    <img class="logo" src="/icon.png" alt="MemTrim" />
     <div class="title">{title}</div>
   </div>
   <div class="controls">
