@@ -4,7 +4,7 @@ use std::process::Command;
 use tracing::{error, info, warn};
 
 /// Task name for elevated execution
-const ELEVATED_TASK_NAME: &str = "TommyMemoryCleanerElevated";
+const ELEVATED_TASK_NAME: &str = "MemTrimElevated";
 
 /// Creates an elevated scheduled task that can run the app without UAC prompt.
 ///

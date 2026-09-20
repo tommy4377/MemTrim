@@ -123,8 +123,8 @@ fn reacquire_single_instance_mutex() {
     }
 
     // Same name/fallback strategy as the acquisition in main()
-    let global_name = to_wide("Global\\TommyMemoryCleaner_SingleInstance");
-    let local_name = to_wide("TommyMemoryCleaner_SingleInstance");
+    let global_name = to_wide("Global\\MemTrim_SingleInstance");
+    let local_name = to_wide("MemTrim_SingleInstance");
 
     let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, global_name.as_ptr()) };
     let handle = if handle.is_null() && unsafe { GetLastError() } == ERROR_ACCESS_DENIED {
@@ -947,8 +947,8 @@ fn main() {
         // Try Global\ prefix first (works across sessions when running elevated).
         // If that fails with ERROR_ACCESS_DENIED (standard user without SeCreateGlobalPrivilege),
         // fall back to a session-local mutex name (bare name without Global\ prefix).
-        let global_name = to_wide("Global\\TommyMemoryCleaner_SingleInstance");
-        let local_name = to_wide("TommyMemoryCleaner_SingleInstance");
+        let global_name = to_wide("Global\\MemTrim_SingleInstance");
+        let local_name = to_wide("MemTrim_SingleInstance");
 
         let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, global_name.as_ptr()) };
 
@@ -1115,7 +1115,7 @@ fn main() {
         use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 
-        let app_id = "TommyMemoryCleaner";
+        let app_id = "MemTrim";
         let app_id_wide: Vec<u16> = OsStr::new(app_id).encode_wide().chain(Some(0)).collect();
 
         unsafe {
@@ -1125,7 +1125,7 @@ fn main() {
             let result = SetCurrentProcessExplicitAppUserModelID(app_id_wide.as_ptr());
             if result == 0 {
                 tracing::info!("✓ AppUserModelID set explicitly: {}", app_id);
-                eprintln!("[TMC] AppUserModelID set explicitly: {}", app_id);
+                eprintln!("[MemTrim] AppUserModelID set explicitly: {}", app_id);
             } else {
                 // Log error but don't block the app (some Windows versions might not support it)
                 tracing::warn!(
@@ -1136,7 +1136,7 @@ fn main() {
                     "This may cause notifications to show AppID instead of DisplayName"
                 );
                 eprintln!(
-                    "[TMC] ERROR: Failed to set AppUserModelID explicitly: HRESULT 0x{:08X}",
+                    "[MemTrim] ERROR: Failed to set AppUserModelID explicitly: HRESULT 0x{:08X}",
                     result
                 );
             }

@@ -1,7 +1,7 @@
 {
   "productName": "MemTrim",
   "version": "5.0.0",
-  "identifier": "TommyMemoryCleaner",
+  "identifier": "com.tommy4377.memtrim",
   "build": {
     "beforeDevCommand": {
       "script": "npm run dev",

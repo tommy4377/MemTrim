@@ -9,9 +9,8 @@ use windows_sys::Win32::Foundation::{GetLastError, HANDLE};
 use windows_sys::Win32::System::EventLog::*;
 use windows_sys::Win32::System::Registry::*;
 
-const EVENT_SOURCE: &str = "TommyMemoryCleaner";
-const REGISTRY_PATH: &str =
-    r"SYSTEM\CurrentControlSet\Services\EventLog\Application\TommyMemoryCleaner";
+const EVENT_SOURCE: &str = "MemTrim";
+const REGISTRY_PATH: &str = r"SYSTEM\CurrentControlSet\Services\EventLog\Application\MemTrim";
 
 // Event IDs for different event types
 const EVENT_ID_STARTUP: u32 = 100;

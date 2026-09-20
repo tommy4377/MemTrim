@@ -92,7 +92,7 @@ fn exe_path() -> Result<PathBuf> {
 }
 
 fn task_name() -> &'static str {
-    "TommyMemoryCleanerAutoStart"
+    "MemTrimAutoStart"
 }
 
 fn app_name() -> &'static str {
