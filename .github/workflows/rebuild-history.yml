@@ -53,7 +53,7 @@ jobs:
       - name: Ensure updater implementation is gone
         shell: bash
         run: |
-          if git grep -n -E 'tauri-plugin-updater|tauri_plugin_updater|check_for_update|cmd_is_update_ready|latest\.json'; then
+          if git grep -n -E 'tauri-plugin-updater|tauri_plugin_updater|check_for_update|cmd_is_update_ready|latest\.json' -- MemTrim; then
             echo "Updater code is still present"
             exit 1
           fi
