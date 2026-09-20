@@ -27,12 +27,12 @@ jobs:
       - name: Publish staging branch and tag refs
         shell: bash
         run: |
-          git push origin refs/heads/memtrim-rebuilt:refs/heads/memtrim-rebuilt
+          git push --force origin refs/heads/memtrim-rebuilt:refs/heads/memtrim-rebuilt
           python - <<'PY'
           import json, subprocess
           m=json.load(open("rebuild-manifest.json", encoding="utf-8"))
           for tag in m["tags"]:
-              subprocess.run(["git","push","origin",f"refs/tags/{tag}:refs/tags/staging/{tag}"],check=True)
+              subprocess.run(["git","push","--force","origin",f"refs/tags/{tag}:refs/tags/staging/{tag}"],check=True)
           PY
 
   validate-windows:
