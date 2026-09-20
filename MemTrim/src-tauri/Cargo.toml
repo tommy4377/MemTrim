@@ -47,7 +47,7 @@ parking_lot = "0.12"
 dirs = "5.0"
 
 # Random for anti-detection
-rand = "0.8"
+rand = "0.10"
 
 # For advanced memory operations
 memmap2 = "0.9"
