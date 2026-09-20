@@ -37,7 +37,7 @@ def noup(b):
  if p.exists(): wr(p,re.sub(r'\n\s*<div class="row">\s*<label>\s*<input[^>]*checked=\{cfg\?\.auto_update\}[^>]*/>\s*\{\$t\(\'Auto update\'\)\}\s*</label>\s*</div>\s*',"\n",p.read_text(encoding="utf-8"),flags=re.S))
  for rel,pat in {
  "ui/src/lib/types.ts":r'(?m)^\s*auto_update:\s*boolean\s*\n',
- "src-tauri/src/config/mod.rs":r'(?m)^\s*pub auto_update:\s*bool,\s*\n|(?m)^\s*auto_update:\s*(?:true|false),\s*\n',
+ "src-tauri/src/config/mod.rs":r'(?m)^\s*(?:pub auto_update:\s*bool,|auto_update:\s*(?:true|false),)\s*\n',
  "src-tauri/src/commands/config.rs":r'(?m)^\s*update_bool!\(auto_update\);\s*\n'}.items():
   p=b/rel
   if p.exists(): wr(p,re.sub(pat,"",p.read_text(encoding="utf-8")))
