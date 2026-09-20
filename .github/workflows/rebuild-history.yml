@@ -1,11 +1,11 @@
-name: Validate MemTrim history rebuild
+name: Rebuild and validate MemTrim history
 
 on:
   push:
     branches:
       - memtrim-history-rebuild
     paths:
-      - '.github/scripts/rebuild_memtrim_history.part*'
+      - '.github/scripts/rebuild_memtrim_history.py'
       - '.github/workflows/rebuild-history.yml'
   workflow_dispatch:
 
@@ -13,57 +13,85 @@ permissions:
   contents: write
 
 jobs:
-  rebuild-and-validate:
-    runs-on: windows-latest
-
+  rebuild:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout full history
+      - name: Checkout complete repository history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
+
+      - name: Rebuild curated history
+        run: python .github/scripts/rebuild_memtrim_history.py
+
+      - name: Publish staging branch and tag refs
+        shell: bash
+        run: |
+          git push origin refs/heads/memtrim-rebuilt:refs/heads/memtrim-rebuilt
+          python - <<'PY'
+          import json, subprocess
+          m=json.load(open("rebuild-manifest.json", encoding="utf-8"))
+          for tag in m["tags"]:
+              subprocess.run(["git","push","origin",f"refs/tags/{tag}:refs/tags/staging/{tag}"],check=True)
+          PY
+
+  validate-windows:
+    needs: rebuild
+    runs-on: windows-latest
+    steps:
+      - name: Checkout rebuilt history
+        uses: actions/checkout@v4
+        with:
+          ref: memtrim-rebuilt
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      - name: Ensure updater implementation is gone
+        shell: bash
+        run: |
+          if git grep -n -E 'tauri-plugin-updater|tauri_plugin_updater|check_for_update|cmd_is_update_ready|latest\.json'; then
+            echo "Updater code is still present"
+            exit 1
+          fi
 
-      - name: Decode rebuild script
+      - name: Install frontend dependencies
+        working-directory: MemTrim/ui
+        run: npm install
+
+      - name: Check frontend
+        working-directory: MemTrim/ui
+        run: npm run check
+
+      - name: Build frontend
+        working-directory: MemTrim/ui
+        run: npm run build
+
+      - name: Rust format
+        working-directory: MemTrim/src-tauri
+        run: cargo fmt --check
+
+      - name: Rust check
+        working-directory: MemTrim/src-tauri
+        run: cargo check
+
+      - name: Build portable executable
+        working-directory: MemTrim/src-tauri
+        run: cargo build --release
+
+      - name: Verify portable executable
         shell: pwsh
         run: |
-          python -c "import base64,gzip,pathlib; parts=sorted(pathlib.Path('.github/scripts').glob('rebuild_memtrim_history.part*')); data=''.join(p.read_text().strip() for p in parts); pathlib.Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py').write_bytes(gzip.decompress(base64.b64decode(data)))"
+          if (!(Test-Path "MemTrim/src-tauri/target/release/MemTrim.exe")) {
+            throw "MemTrim.exe was not produced"
+          }
 
-      - name: Patch rebuild script
-        shell: pwsh
-        run: |
-          $path = "$env:RUNNER_TEMP\rebuild_memtrim_history.py"
-          $s = Get-Content $path -Raw
-          $s = $s.Replace('|(?m)^\s*auto_update:', '|^\s*auto_update:')
-          $s = $s.Replace('["npm",', '["npm.cmd",')
-          $s = $s.Replace('".xml"}', '".xml", ".lock"}')
-          Set-Content -Path $path -Value $s -NoNewline -Encoding utf8
-
-      - name: Configure Git identity
-        shell: pwsh
-        run: |
-          git config user.name "tommy4377"
-          git config user.email "129632197+tommy4377@users.noreply.github.com"
-
-      - name: Rebuild and validate history
-        shell: pwsh
-        run: python "$env:RUNNER_TEMP\rebuild_memtrim_history.py"
-
-      - name: Publish validated staging branch
-        shell: pwsh
-        run: git push origin +memtrim-rebuilt-output:refs/heads/memtrim-rebuilt-output
-
-      - name: Upload rebuild manifest
+      - name: Upload validated portable build
         uses: actions/upload-artifact@v4
         with:
-          name: memtrim-rebuild-manifest
-          path: rebuild-output.json
+          name: MemTrim-v5.0.0-portable-validation
+          path: MemTrim/src-tauri/target/release/MemTrim.exe
+          if-no-files-found: error
