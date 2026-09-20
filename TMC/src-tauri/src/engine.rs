@@ -8,6 +8,9 @@ use crate::memory::ops::{
     memory_info, optimize_combined_page_list, optimize_modified_page_list, optimize_registry_cache,
     optimize_standby_list, optimize_system_file_cache, optimize_working_set,
 };
+use crate::memory::advanced::{
+    trim_memory_compression_store,
+};
 use crate::memory::types::{Areas, MemoryInfo, Reason};
 use crate::os;
 use serde::{Deserialize, Serialize};
@@ -188,11 +191,22 @@ impl Engine {
         let mut successful_areas = 0;
 
         // Costruisci lista operazioni
-        if areas.contains(Areas::WORKING_SET) {
-            area_operations.push(("WorkingSet", "Working Set"));
+        // Order operations for optimal chaining:
+        // 1. ModifiedFileCache first (flushes disk cache)
+        // 2. ModifiedPageList second (needs flushed data)
+        // 3. SystemFileCache (limits cache size)
+        // 4. Other operations
+        if areas.contains(Areas::MODIFIED_FILE_CACHE) {
+            area_operations.push(("ModifiedFileCache", "Modified File Cache"));
         }
         if areas.contains(Areas::MODIFIED_PAGE_LIST) {
             area_operations.push(("ModifiedPageList", "Modified Page List"));
+        }
+        if areas.contains(Areas::SYSTEM_FILE_CACHE) {
+            area_operations.push(("SystemFileCache", "System File Cache"));
+        }
+        if areas.contains(Areas::WORKING_SET) {
+            area_operations.push(("WorkingSet", "Working Set"));
         }
         if areas.contains(Areas::STANDBY_LIST) {
             area_operations.push(("StandbyList", "Standby List"));
@@ -202,14 +216,8 @@ impl Engine {
         if areas.contains(Areas::STANDBY_LIST_LOW) {
             area_operations.push(("StandbyListLowPriority", "Standby List (Low Priority)"));
         }
-        if areas.contains(Areas::SYSTEM_FILE_CACHE) {
-            area_operations.push(("SystemFileCache", "System File Cache"));
-        }
         if areas.contains(Areas::COMBINED_PAGE_LIST) {
             area_operations.push(("CombinedPageList", "Combined Page List"));
-        }
-        if areas.contains(Areas::MODIFIED_FILE_CACHE) {
-            area_operations.push(("ModifiedFileCache", "Modified File Cache"));
         }
         if areas.contains(Areas::REGISTRY_CACHE) {
             area_operations.push(("RegistryCache", "Registry Cache"));
@@ -454,15 +462,32 @@ impl Engine {
                     .lock()
                     .map(|c| c.process_exclusion_list_lower())
                     .unwrap_or_default();
+                
+                // Always use stealth EmptyWorkingSet to bypass AV
+                tracing::debug!("Using stealth mode for Working Set optimization");
+                
                 optimize_working_set(&excl)
             }
-            "SystemFileCache" => optimize_system_file_cache(),
-            "ModifiedPageList" => optimize_modified_page_list(),
-            "StandbyList" => optimize_standby_list(false),
+            "SystemFileCache" => {
+                // System cache optimization
+                optimize_system_file_cache()
+            }
+            "ModifiedPageList" => {
+                // Use the optimized modified page list function (includes advanced flush with fallback)
+                optimize_modified_page_list()
+            }
+            "StandbyList" => {
+                optimize_standby_list(false)
+            }
             "StandbyListLowPriority" => optimize_standby_list(true),
             "CombinedPageList" => optimize_combined_page_list(),
             "RegistryCache" => optimize_registry_cache(),
-            "ModifiedFileCache" => crate::memory::volumes::flush_modified_file_cache_all(),
+            "ModifiedFileCache" => {
+                // Always trim memory compression store
+                tracing::warn!("Using memory compression store trim");
+                let _ = trim_memory_compression_store();
+                crate::memory::volumes::flush_modified_file_cache_all()
+            }
             _ => {
                 tracing::warn!("Unknown optimization operation: {}", operation_name);
                 Ok(())

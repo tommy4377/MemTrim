@@ -48,6 +48,13 @@ dirs = "5.0"
 # Random for anti-detection
 rand = "0.8"
 
+# For advanced memory operations
+memmap2 = "0.9"
+page_size = "0.5"
+
+# For thread manipulation
+thread-control = "0.1"
+
 # Windows native notifications
 winrt-notification = "0.5"
 
@@ -56,10 +63,14 @@ winrt-notification = "0.5"
 windows-sys = { version = "*", features = [
   "Win32_Foundation",
   "Win32_Security",
+  "Win32_Security_Authentication",
+  "Win32_Security_Authentication_Identity",
   "Win32_System_Threading",
   "Win32_System_Memory",
   "Win32_System_SystemInformation",
+  "Win32_System_SystemServices",
   "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Diagnostics_Debug",
   "Win32_System_ProcessStatus",
   "Win32_Storage_FileSystem",
   "Win32_UI_WindowsAndMessaging",
@@ -71,6 +82,7 @@ windows-sys = { version = "*", features = [
   "Win32_System_EventLog",
   "Win32_System_LibraryLoader",
   "Win32_System_Console",
+  "Win32_System_SystemServices",
 ] }
 
 # NT API
