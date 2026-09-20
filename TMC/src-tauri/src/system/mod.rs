@@ -2,12 +2,12 @@
 pub mod priority;
 pub mod startup;
 pub mod window;
+pub mod elevated_task;
 
 /// Verifica se il processo corrente è eseguito con privilegi amministratore
 #[cfg(windows)]
 pub fn is_app_elevated() -> bool {
     unsafe {
-        use std::ptr::null_mut;
         use windows_sys::Win32::{
             Foundation::{CloseHandle, HANDLE},
             Security::TOKEN_QUERY,
@@ -39,7 +39,7 @@ pub fn is_app_elevated() -> bool {
         }
 
         let process = GetCurrentProcess();
-        let mut token: HANDLE = null_mut();
+        let mut token: HANDLE = std::ptr::null_mut();
 
         if OpenProcessToken(process, TOKEN_QUERY, &mut token) == 0 {
             return false;
@@ -48,7 +48,7 @@ pub fn is_app_elevated() -> bool {
         // Usa scopeguard per garantire la chiusura del token
         // HANDLE in windows-sys is isize, so compare with 0
         let _guard = scopeguard::guard(token, |t: HANDLE| {
-            if !t.is_null() {
+            if t != std::ptr::null_mut() {
                 CloseHandle(t);
             }
         });
