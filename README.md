@@ -36,4 +36,4 @@ Created and maintained by @tommy4377.
 Gabriele R. / @LAMAgalletta0IQ contributed Windows elevation, logging and window-handling work in the v4 line.
 
 ## License
-No open-source license is granted yet. A project-wide license can be added after all copyright holders of existing contributions agree to the terms.
+MemTrim is released under the [MIT License](LICENSE).
