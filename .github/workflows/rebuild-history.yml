@@ -41,7 +41,7 @@ jobs:
       - name: Patch rebuild script
         shell: pwsh
         run: |
-          python -c "from pathlib import Path; p=Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py'); s=p.read_text(); p.write_text(s.replace('|(?m)^\\s*auto_update:', '|^\\s*auto_update:'))"
+          python -c "from pathlib import Path; p=Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py'); s=p.read_text(); s=s.replace('|(?m)^\\s*auto_update:', '|^\\s*auto_update:'); s=s.replace('[\"npm\",', '[\"npm.cmd\",'); s=s.replace('\".xml\"}', '\".xml\", \".lock\"}'); p.write_text(s)"
 
       - name: Configure Git identity
         shell: pwsh
