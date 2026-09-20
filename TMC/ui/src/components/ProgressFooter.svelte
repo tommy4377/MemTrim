@@ -1,59 +1,76 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { progress } from '../lib/store';
-  import { t } from '../i18n/index';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte'
+  import { progress } from '../lib/store'
+  import { t } from '../i18n/index'
 
-  const dispatch = createEventDispatcher<{ optimize: void }>();
+  const dispatch = createEventDispatcher<{ optimize: void }>()
 
-  let p: any = null;
-  let unsub: (() => void) | null = null;
-  let percent = 0;
-  let statusText = '';
+  let p: any = null
+  let unsub: (() => void) | null = null
+  let percent = 0
+  let statusText = ''
 
   onMount(() => {
-    unsub = progress.subscribe(v => {
-      p = v;
-      // Calcola percentuale
-      percent = v && v.total > 0 ? Math.floor((v.value / v.total) * 100) : 0;
-      
-      // Genera testo status
-      if (v?.running && v?.step) {
-        // Traduci i nomi delle aree
-        const stepTranslations: Record<string, string> = {
-          'Working Set': $t('Working Set'),
-          'Modified Page List': $t('Modified Pages'),
-          'Standby List': $t('Standby List'),
-          'Standby List (Low Priority)': $t('Low Priority Standby'),
-          'System File Cache': $t('System Cache'),
-          'Combined Page List': $t('Combined Pages'),
-          'Modified File Cache': $t('File Cache'),
-          'Registry Cache': $t('Registry Cache'),
-          'Completed': $t('Done')
-        };
-        
-        const translatedStep = stepTranslations[v.step] || v.step;
-        statusText = `${v.value}/${v.total} - ${translatedStep} (${percent}%)`;
-      } else if (v?.step === 'Completed' || v?.step === 'Done') {
-        statusText = $t('Done');
-      } else {
-        statusText = $t('Ready');
+    unsub = progress.subscribe((v) => {
+      p = v
+    })
+  })
+
+  // Calcola percentuale e testo status in modo reattivo
+  $: percent = p && p.total > 0 ? Math.floor((p.value / p.total) * 100) : 0
+
+  // Rendi statusText reattivo sia al progress che alla lingua
+  $: statusText = (() => {
+    if (p?.running && p?.step) {
+      // Traduci i nomi delle aree
+      const stepTranslations: Record<string, string> = {
+        'Working Set': $t('Working Set'),
+        'Modified Page List': $t('Modified Pages'),
+        'Standby List': $t('Standby List'),
+        'Standby List (Low Priority)': $t('Low Priority Standby'),
+        'System File Cache': $t('System Cache'),
+        'Combined Page List': $t('Combined Pages'),
+        'Modified File Cache': $t('File Cache'),
+        'Registry Cache': $t('Registry Cache'),
+        Completed: $t('Done'),
       }
-    });
-  });
+
+      const translatedStep = stepTranslations[p.step] || p.step
+      return `${p.value}/${p.total} - ${translatedStep} (${percent}%)`
+    } else if (p?.step === 'Completed' || p?.step === 'Done') {
+      return $t('Done')
+    } else {
+      return $t('Ready')
+    }
+  })()
 
   onDestroy(() => {
     if (unsub) {
-      unsub();
-      unsub = null;
+      unsub()
+      unsub = null
     }
-  });
-  
+  })
+
   function handleOptimize() {
     if (!p?.running) {
-      dispatch('optimize');
+      dispatch('optimize')
     }
   }
 </script>
+
+<div class="footer">
+  <button on:click={handleOptimize} disabled={p?.running}>
+    {p?.running ? $t('Optimizing...') : $t('Optimize')}
+  </button>
+
+  <div class="progress">
+    <div class="fill" class:active={p?.running} style="width: {percent}%"></div>
+  </div>
+
+  <div class="status" class:active={p?.running}>
+    {statusText}
+  </div>
+</div>
 
 <style>
   .footer {
@@ -87,15 +104,20 @@
     top: 0;
     will-change: width;
   }
-  
+
   .fill.active {
     background: linear-gradient(90deg, var(--btn-bg), var(--bar-fill));
     animation: pulse 2s ease-in-out infinite;
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.9; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.9;
+    }
   }
 
   button {
@@ -115,7 +137,7 @@
     min-width: fit-content;
     width: auto;
   }
-  
+
   /* Effetto shimmer per il bottone optimize */
   button:not(:disabled)::after {
     content: '';
@@ -124,34 +146,28 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+    background: linear-gradient(
+      135deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 70%
+    );
     animation: shimmer 2s infinite;
     pointer-events: none;
     border-radius: 12px;
   }
-  
+
   @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
-  
-  html[data-theme="dark"] button {
+
+  html[data-theme='dark'] button {
     cursor: url('/cursors/dark/hand.cur'), pointer;
-    font-weight: 500;
-    font-size: 13px;
-    min-width: auto;
-    width: auto;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  button:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-  }
-
-  button:active:not(:disabled) {
-    transform: translateY(0);
   }
 
   button:disabled {
@@ -159,7 +175,7 @@
     cursor: not-allowed;
     background: var(--bar-track);
   }
-  
+
   /* Rimuovi shimmer quando disabled */
   button:disabled::after {
     display: none;
@@ -174,7 +190,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  
+
   .status.active {
     color: var(--btn-bg);
     font-weight: 500;
@@ -186,34 +202,16 @@
       gap: 12px;
       padding: 12px;
     }
-    
+
     button {
       min-width: 100px;
       padding: 8px 16px;
       font-size: 12px;
     }
-    
+
     .status {
       min-width: 150px;
       font-size: 11px;
     }
   }
 </style>
-
-<div class="footer">
-  <button on:click={handleOptimize} disabled={p?.running}>
-    {p?.running ? $t('Optimizing...') : $t('Optimize')}
-  </button>
-  
-  <div class="progress">
-    <div 
-      class="fill" 
-      class:active={p?.running}
-      style="width: {percent}%"
-    ></div>
-  </div>
-  
-  <div class="status" class:active={p?.running}>
-    {statusText}
-  </div>
-</div>

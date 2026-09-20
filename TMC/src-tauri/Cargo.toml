@@ -1,10 +1,13 @@
 [package]
-name = "TMC"
-version = "0.1.0"
+name = "TommyMemoryCleaner"
+version = "1.0.0"
 edition = "2021"
 publish = false
 authors = ["tommy437"]
 description = "Advanced Memory Optimization Tool"
+
+# Windows resource file for version info
+build = "build.rs"
 
 [dependencies]
 # Image processing per tray icon
@@ -84,6 +87,9 @@ tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 tauri-build = { version = "2", features = [] }
 winres = "0.1"
 
+[dev-dependencies]
+# Dev dependencies for linting and testing
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
@@ -95,13 +101,9 @@ lto = true
 opt-level = "s"
 strip = true
 
-# Metadati Windows
 [package.metadata.winres]
 OriginalFilename = "TommyMemoryCleaner.exe"
 ProductName = "Tommy Memory Cleaner"
 CompanyName = "tommy437"
-FileDescription = "Advanced Memory Optimization Tool"
-LegalCopyright = "© 2025 tommy437"
-FileVersion = "1.0.0.0"
-ProductVersion = "1.0.0.0"
-IconPath = "icons/icon.ico"
+FileDescription = "Advanced Memory Optimization Tool for Windows"
+LegalCopyright = "© 2025 tommy437. All rights reserved."

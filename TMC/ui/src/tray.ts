@@ -1,235 +1,292 @@
-import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { areasForProfile, areasToString } from './lib/profiles';
+/**
+ * Tray menu implementation
+ * Handles tray icon menu interactions and translations
+ */
 
-const win = getCurrentWebviewWindow();
+import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { listen } from '@tauri-apps/api/event'
+import { areasForProfile, areasToString } from './lib/profiles'
+import { dict, setLanguage, lang } from './i18n'
+import { get } from 'svelte/store'
 
-// Esponi win globalmente per il codice inline Rust
-(window as any).win = win;
+const win = getCurrentWebviewWindow()
 
-const translations = {
-    it: { dashboard: 'Dashboard', optimize: 'Ottimizza', exit: 'Esci' },
-    en: { dashboard: 'Dashboard', optimize: 'Optimize', exit: 'Exit' },
-    es: { dashboard: 'Panel', optimize: 'Optimizar', exit: 'Salir' },
-    fr: { dashboard: 'Tableau', optimize: 'Optimiser', exit: 'Quitter' },
-    pt: { dashboard: 'Painel', optimize: 'Otimizar', exit: 'Sair' },
-    de: { dashboard: 'Dashboard', optimize: 'Optimieren', exit: 'Beenden' },
-    ar: { dashboard: 'لوحة التحكم', optimize: 'تحسين', exit: 'خروج' },
-    ja: { dashboard: 'ダッシュボード', optimize: '最適化', exit: '終了' },
-    zh: { dashboard: '仪表板', optimize: '优化', exit: '退出' }
-};
+// Expose win globally for Rust inline code
+;(window as any).win = win
 
+/** Update translations in the DOM */
+function updateTrayTranslations() {
+  const translations = get(dict)
+
+  // Translate all elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n')
+    if (key && translations[key]) {
+      el.textContent = translations[key]
+    } else if (key && !translations[key]) {
+      // Fallback: show key if translation is missing
+      console.warn(`Missing translation for "${key}" in language ${get(lang)}`)
+      el.textContent = key
+    }
+  })
+}
+
+/** Setup event listeners for tray menu */
+async function setupEventListeners() {
+  // Listen for language change events from backend
+  await listen('language-changed', async (event: any) => {
+    const newLanguage = event.payload
+    console.log('Language changed in tray:', newLanguage)
+    await setLanguage(newLanguage)
+    // Wait for translations to load
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    updateTrayTranslations()
+  })
+
+  // Listen for tray menu open events
+  await listen('tray-menu-open', async () => {
+    console.log('Tray menu opened, reloading config...')
+    await reloadTrayConfig()
+  })
+
+  // Listen for configuration change events
+  await listen('config-changed', async () => {
+    console.log('Config changed, reloading tray config...')
+    await reloadTrayConfig()
+  })
+}
+
+/** Reload tray configuration */
+async function reloadTrayConfig() {
+  try {
+    const config = (await invoke('cmd_get_config')) as any
+    document.body.setAttribute('data-theme', config.theme || 'dark')
+
+    // Apply main color to menu items
+    const mainColor =
+      config.theme === 'light'
+        ? config.main_color_hex_light || '#9a8a72'
+        : config.main_color_hex_dark || '#0a84ff'
+    document.documentElement.style.setProperty('--main-color', mainColor)
+
+    // Set language using i18n system
+    await setLanguage(config.language || 'en')
+
+    // Wait for translations to load before updating
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Update translations immediately
+    updateTrayTranslations()
+  } catch (err: any) {
+    console.error('Config reload failed:', err)
+  }
+}
+
+/** Load initial configuration and setup listeners */
 async function loadConfig() {
-    try {
-        const config = await invoke('cmd_get_config') as any;
-        document.body.setAttribute('data-theme', config.theme || 'dark');
-        
-        // Applica mainColor ai menu items (non danger)
-        const mainColor = config.theme === 'light' 
-            ? (config.main_color_hex_light || '#9a8a72')
-            : (config.main_color_hex_dark || '#0a84ff');
-        document.documentElement.style.setProperty('--main-color', mainColor);
-        
-        const t = translations[config.language] || translations.it;
-        document.querySelectorAll('[data-i18n]').forEach(el => {
-            const key = el.getAttribute('data-i18n');
-            if (key && t[key as keyof typeof t]) el.textContent = t[key as keyof typeof t];
-        });
-    } catch (err) {
-        console.error('Config load failed:', err);
-    }
+  try {
+    await reloadTrayConfig()
+
+    // Listen for future dictionary changes
+    const unsubscribe = dict.subscribe(() => {
+      // Wait a tick to ensure DOM is updated
+      requestAnimationFrame(() => {
+        updateTrayTranslations()
+      })
+    })
+  } catch (err: any) {
+    console.error('Config load failed:', err)
+  }
 }
 
+/** Handle tray menu actions */
 async function handleAction(action: string) {
-    if (!action) return;
-    
-    try {
-        // Chiudi il menu prima di eseguire l'azione
-        await win.hide();
-        
-        // Piccolo delay per assicurarsi che il menu sia chiuso
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Esegui l'azione
-        if (action === 'open') {
-            await invoke('cmd_show_or_create_window');
-        } else if (action === 'optimize') {
-            // FIX: Leggi il profilo corrente dalla configurazione e usa le aree corrette
-            try {
-                const config = await invoke('cmd_get_config') as any;
-                const profile = config.profile || 'Balanced';
-                
-                // Usa la funzione areasForProfile per ottenere le aree corrette
-                const areas = areasForProfile(profile);
-                const areasString = areasToString(areas);
-                
-                await invoke('cmd_optimize_async', { 
-                    reason: 'Manual', 
-                    areas: areasString 
-                });
-            } catch (err) {
-                console.error('Failed to get config for optimization, using default balanced profile:', err);
-                // Fallback a balanced se non riesce a leggere la config
-                const defaultAreas = areasForProfile('Balanced');
-                const defaultAreasString = areasToString(defaultAreas);
-                await invoke('cmd_optimize_async', { 
-                    reason: 'Manual', 
-                    areas: defaultAreasString 
-                });
-            }
-        } else if (action === 'exit') {
-            await invoke('cmd_exit');
-        }
-    } catch (err) {
-        console.error('Action failed:', err);
-    } finally {
-        // Assicurati che il menu sia sempre chiuso dopo un'azione
-        win.hide().catch(() => {});
+  if (!action) return
+
+  try {
+    // Close menu before executing action
+    await win.hide()
+
+    // Small delay to ensure menu is closed
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Execute action
+    if (action === 'open') {
+      await invoke('cmd_show_or_create_window')
+    } else if (action === 'optimize') {
+      // Read current profile from config and use correct areas
+      try {
+        const config = (await invoke('cmd_get_config')) as any
+        const profile = config.profile || 'Balanced'
+
+        // Use areasForProfile to get correct areas
+        const areas = areasForProfile(profile)
+        const areasString = areasToString(areas)
+
+        await invoke('cmd_optimize_async', {
+          reason: 'Manual',
+          areas: areasString,
+        })
+      } catch (err: any) {
+        console.error('Failed to get config for optimization, using default balanced profile:', err)
+        // Fallback to balanced if config read fails
+        const defaultAreas = areasForProfile('Balanced')
+        const defaultAreasString = areasToString(defaultAreas)
+        await invoke('cmd_optimize_async', {
+          reason: 'Manual',
+          areas: defaultAreasString,
+        })
+      }
+    } else if (action === 'exit') {
+      await invoke('cmd_exit')
     }
+  } catch (err: any) {
+    console.error('Action failed:', err)
+  } finally {
+    // Always ensure menu is closed after action
+    win.hide().catch(() => {})
+  }
 }
 
-// Setup semplice e diretto degli event listener
+/** Setup menu item click handlers */
 function setupMenuItems() {
-    const items = document.querySelectorAll('.menu-item');
-    items.forEach((item) => {
-        const action = item.getAttribute('data-action');
-        if (action) {
-            (item as HTMLElement).onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleAction(action);
-            };
-        }
-    });
+  const items = document.querySelectorAll('.menu-item')
+  items.forEach((item) => {
+    const action = item.getAttribute('data-action')
+    if (action) {
+      ;(item as HTMLElement).onclick = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        handleAction(action)
+      }
+    }
+  })
 }
 
-// Setup iniziale
-setupMenuItems();
+// Initial setup
+setupMenuItems()
 
-// Flag per prevenire chiusura immediata durante setup
-let isInitializing = true;
-setTimeout(() => { isInitializing = false; }, 500);
+// Flag to prevent immediate close during setup
+let isInitializing = true
+setTimeout(() => {
+  isInitializing = false
+}, 500)
 
-// Funzione per chiudere il menu
+/** Close the tray menu */
 function closeMenu() {
-    if (isInitializing) return;
-    
-    document.body.classList.remove('menu-open');
-    
-    // Chiudi la finestra con retry
-    win.hide().catch((err) => {
-        console.warn('Failed to hide tray menu window:', err);
-        // Retry dopo un breve delay
-        setTimeout(() => {
-            win.hide().catch(() => {});
-        }, 100);
-    });
-}
+  if (isInitializing) return
 
-// Esponi closeMenu globalmente
-(window as any).closeMenu = closeMenu;
+  document.body.classList.remove('menu-open')
 
-// Funzione per mostrare il menu
-function showMenu() {
-    document.body.classList.add('menu-open');
-}
-
-// Esponi showMenu globalmente per permettere chiamate dal backend
-(window as any).showMenu = showMenu;
-
-// Mostra il menu quando la finestra diventa visibile
-if (!document.hidden) {
-    // Piccolo delay per assicurarsi che il DOM sia pronto
+  // Hide window with retry
+  win.hide().catch((err) => {
+    console.warn('Failed to hide tray menu window:', err)
+    // Retry after short delay
     setTimeout(() => {
-        showMenu();
-    }, 50);
+      win.hide().catch(() => {})
+    }, 100)
+  })
+}
+
+// Expose closeMenu globally
+;(window as any).closeMenu = closeMenu
+
+/** Show the menu */
+function showMenu() {
+  document.body.classList.add('menu-open')
+}
+
+// Expose showMenu globally for backend calls
+;(window as any).showMenu = showMenu
+
+// Show menu when window becomes visible
+if (!document.hidden) {
+  // Small delay to ensure DOM is ready
+  setTimeout(() => {
+    showMenu()
+  }, 50)
 }
 
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-        showMenu();
-    } else {
-        // Chiudi solo se la finestra diventa nascosta (es. alt-tab)
-        closeMenu();
-    }
-});
+  if (!document.hidden) {
+    showMenu()
+  } else {
+    // Close only if window becomes hidden (e.g., alt-tab)
+    closeMenu()
+  }
+})
 
-// ⭐ Chiusura automatica quando la finestra perde il focus (click fuori)
-// Usa l'API Tauri invece di window.addEventListener per maggiore affidabilità
-win.onFocusChanged((isFocused) => {
-    if (!isFocused && document.body.classList.contains('menu-open')) {
-        // Piccolo delay per permettere ai click sui menu items di funzionare
-        setTimeout(() => {
-            closeMenu();
-        }, 100);
-    }
-});
+// Auto-close when window loses focus (click outside)
+// Use Tauri API instead of window.addEventListener for better reliability
+win.onFocusChanged((event: any) => {
+  const isFocused = event.payload
+  if (!isFocused && document.body.classList.contains('menu-open')) {
+    // Small delay to allow menu item clicks to work
+    setTimeout(() => {
+      closeMenu()
+    }, 100)
+  }
+})
 
-// Fallback per click su overlay (se presente)
+// Fallback for click on overlay (if present)
 document.querySelector('.click-overlay')?.addEventListener('click', () => {
-    if (document.body.classList.contains('menu-open')) {
-        win.hide();
-    }
-});
+  if (document.body.classList.contains('menu-open')) {
+    win.hide()
+  }
+})
 
-// Gestione click fuori dal menu container - unico modo per chiudere il menu
+// Handle clicks outside menu container - only way to close menu
 document.addEventListener('click', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const clickOverlay = document.getElementById('click-overlay');
-    
-    // Se il click è sull'overlay (fuori dal menu), chiudi il menu
-    if (clickOverlay && e.target === clickOverlay) {
-        if (document.body.classList.contains('menu-open')) {
-            closeMenu();
-        }
-        return;
-    }
-    
-    // Se il click è fuori dal menu container, chiudilo
-    if (menuContainer && !menuContainer.contains(e.target as Node)) {
-        if (document.body.classList.contains('menu-open')) {
-            closeMenu();
-        }
-    }
-});
+  const menuContainer = document.querySelector('.menu-container')
+  const clickOverlay = document.getElementById('click-overlay')
 
-// Chiudi quando si preme ESC
+  // If click is on overlay (outside menu), close menu
+  if (clickOverlay && e.target === clickOverlay) {
+    if (document.body.classList.contains('menu-open')) {
+      closeMenu()
+    }
+    return
+  }
+
+  // If click is outside menu container, close it
+  if (menuContainer && !menuContainer.contains(e.target as Node)) {
+    if (document.body.classList.contains('menu-open')) {
+      closeMenu()
+    }
+  }
+})
+
+// Close on ESC key
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeMenu();
-    }
-});
+  if (e.key === 'Escape') {
+    closeMenu()
+  }
+})
 
-// Esponi loadConfig globalmente per permettere chiamate esterne
-(window as any).loadConfig = loadConfig;
+// Expose loadConfig globally for external calls
+;(window as any).loadConfig = loadConfig
 
-// Polling periodico per controllare i cambiamenti di tema dalla configurazione
-setInterval(async () => {
-    try {
-        const config = await invoke('cmd_get_config') as any;
-        const newTheme = config.theme || 'dark';
-        const currentTheme = document.body.getAttribute('data-theme');
-        if (currentTheme !== newTheme) {
-            loadConfig();
-        }
-    } catch (err) {
-        // Ignora errori silenziosamente
-    }
-}, 500);
+/** Initialize tray */
+async function initializeTray() {
+  // First register event listeners
+  await setupEventListeners()
+  // Then load configuration
+  await loadConfig()
+}
 
-// Carica configurazione all'avvio
-loadConfig();
+// Initialize on startup
+initializeTray()
 
-// Posiziona il menu container in base alla posizione della finestra
-// La finestra è fullscreen, quindi dobbiamo posizionare il container
+// Position menu container based on window position
+// Window is fullscreen, so we need to position the container
 window.addEventListener('load', () => {
-    // Ottieni la posizione della finestra (che è già posizionata sopra la tray icon)
-    // Il menu container deve essere posizionato in alto a sinistra della finestra
-    const menuContainer = document.querySelector('.menu-container') as HTMLElement;
-    if (menuContainer) {
-        menuContainer.style.position = 'absolute';
-        menuContainer.style.top = '0';
-        menuContainer.style.left = '0';
-    }
-});
-
+  // Get window position (already positioned above tray icon)
+  // Menu container should be positioned top-left of window
+  const menuContainer = document.querySelector('.menu-container') as HTMLElement
+  if (menuContainer) {
+    menuContainer.style.position = 'absolute'
+    menuContainer.style.top = '0'
+    menuContainer.style.left = '0'
+  }
+})
