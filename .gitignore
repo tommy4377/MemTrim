@@ -8,6 +8,9 @@
 # VBScript files
 *.vbs
 
+# PowerShell scripts
+*.ps1
+
 # Log files
 *.log
 *.log.*
@@ -15,8 +18,16 @@ logs/
 *.txt
 !TMC/src-tauri/installer/welcome.txt
 
-# PowerShell scripts (optional - uncomment if you want to exclude them)
-# *.ps1
+# Audio/Video/Media files (non-essential)
+*.ogg
+*.mp3
+*.wav
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flac
+*.m4a
 
 # Rust
 /target/
@@ -35,6 +46,7 @@ package-lock.json
 dist/
 build/
 *.exe
+!releases/**/*.exe
 *.dll
 *.pdb
 *.lib
@@ -80,9 +92,14 @@ desktop.ini
 .env.local
 .env.*.local
 
-# Installer outputs
-TMC/src-tauri/installer/output/
+# Inno Setup installer files
+*.iss
+TMC/src-tauri/installer/
 *.iss.bak
+
+# Installer scripts
+*installer*.bat
+build-installer.bat
 
 # Test files
 *.test
@@ -133,4 +150,7 @@ TMC/ui/.svelte-kit/
 *~
 .directory
 .Trash-*
+
+# Embedded git repositories (duplicate repos)
+TMC/Tommy-Memory-Cleaner/
 
