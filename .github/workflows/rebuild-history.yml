@@ -1,0 +1,59 @@
+name: Validate MemTrim history rebuild
+
+on:
+  push:
+    branches:
+      - memtrim-history-rebuild
+    paths:
+      - '.github/scripts/rebuild_memtrim_history.py.gz.b64'
+      - '.github/workflows/rebuild-history.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-and-validate:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Decode rebuild script
+        shell: pwsh
+        run: |
+          python -c "import base64,gzip,pathlib; p=pathlib.Path('.github/scripts/rebuild_memtrim_history.py.gz.b64'); pathlib.Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py').write_bytes(gzip.decompress(base64.b64decode(p.read_text().strip())))"
+
+      - name: Configure Git identity
+        shell: pwsh
+        run: |
+          git config user.name "tommy4377"
+          git config user.email "129632197+tommy4377@users.noreply.github.com"
+
+      - name: Rebuild and validate history
+        shell: pwsh
+        run: python "$env:RUNNER_TEMP\rebuild_memtrim_history.py"
+
+      - name: Publish validated staging branch
+        shell: pwsh
+        run: git push origin +memtrim-rebuilt-output:refs/heads/memtrim-rebuilt-output
+
+      - name: Upload rebuild manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: memtrim-rebuild-manifest
+          path: rebuild-output.json
