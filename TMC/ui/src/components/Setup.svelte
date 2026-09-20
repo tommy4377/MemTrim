@@ -18,6 +18,8 @@
   let isWindows10 = false
   let cfg: Config | null = null
   let cfgUnsub: (() => void) | null = null
+  let isElevated = true
+  let elevationWarning = ''
 
   const languageOptions = [
     { value: 'en', label: 'English' },
@@ -38,8 +40,28 @@
 
   let unlistenSetupComplete: (() => void) | null = null
 
+  async function checkElevation() {
+    try {
+      const result = await invoke<any>('cmd_check_elevation')
+      isElevated = result.is_elevated
+      
+      if (!isElevated) {
+        elevationWarning = '⚠️ Administrator privileges required for full memory optimization capabilities'
+      } else {
+        elevationWarning = ''
+      }
+    } catch (error) {
+      console.error('Failed to check elevation:', error)
+      // A failed check does not mean the app lacks privileges — it may well
+      // be elevated. Don't show a warning banner for an IPC hiccup.
+      elevationWarning = ''
+    }
+  }
+
   onMount(async () => {
-    // Rileva tema e lingua dal sistema
+    // Check elevation status first
+    await checkElevation()
+    // Detect theme and language from the system
     try {
       const systemTheme = await invoke<string>('cmd_get_system_theme')
       if (systemTheme) {
@@ -60,39 +82,39 @@
       console.error('Failed to get system language:', error)
     }
 
-    // Usa la configurazione salvata per Windows 10
+    // Use the saved configuration for Windows 10 detection
     cfgUnsub = config.subscribe((v) => {
       cfg = v;
       isWindows10 = v?.is_windows_10 ?? false;
     });
 
-    // Applica il tema iniziale
+    // Apply the initial theme
     document.documentElement.setAttribute('data-theme', theme)
 
-    // Ascolta evento per chiudere la finestra (backup se il backend non riesce a chiudere)
+    // Listen for the window-close event (backup in case the backend fails to close it)
     try {
       unlistenSetupComplete = await listen('setup-complete', async () => {
-        // Aspetta un po' per dare tempo al backend di chiudere la finestra
+        // Wait briefly to give the backend time to close the window
         await new Promise((resolve) => setTimeout(resolve, 500))
         const window = WebviewWindow.getCurrent()
         if (window) {
           try {
-            // Verifica se la finestra è ancora aperta prima di chiuderla
+            // Check that the window is still open before closing it
             const isVisible = await window.isVisible()
             if (isVisible) {
               console.log('Setup window still visible, closing from frontend...')
-              // Prova a chiudere più volte se necessario
+              // Retry closing multiple times if needed
               try {
                 await window.close()
               } catch (closeErr) {
                 console.warn('First close attempt failed, trying again...', closeErr)
-                // Aspetta un po' e riprova
+                // Wait briefly and retry
                 await new Promise((resolve) => setTimeout(resolve, 200))
                 try {
                   await window.close()
                 } catch (closeErr2) {
                   console.error('Failed to close window after retry:', closeErr2)
-                  // Ultimo tentativo: nascondi invece di chiudere
+                  // Last resort: hide instead of closing
                   try {
                     await window.hide()
                   } catch (hideErr) {
@@ -103,12 +125,12 @@
             }
           } catch (err) {
             console.error('Failed to check window visibility:', err)
-            // Fallback: prova comunque a chiudere
+            // Fallback: attempt to close anyway
             try {
               await window.close()
             } catch (closeErr) {
               console.error('Failed to close window:', closeErr)
-              // Ultimo fallback: nascondi
+              // Final fallback: hide
               try {
                 await window.hide()
               } catch (hideErr) {
@@ -139,9 +161,9 @@
 
   async function handleLanguageChange(value: string) {
     language = value
-    // Applica la lingua immediatamente
+    // Apply the language immediately
     setLanguage(value as any)
-    // Aggiorna le opzioni del tema con la nuova lingua
+    // Refresh the theme options with the new language
     themeOptions = [
       { value: 'light', label: $t('Light') },
       { value: 'dark', label: $t('Dark') },
@@ -149,7 +171,7 @@
   }
 
   async function handleComplete() {
-    if (isLoading) return // Previeni doppi click
+    if (isLoading) return // Prevent double clicks
     isLoading = true
     try {
       // Detect platform before completing setup
@@ -173,17 +195,17 @@
         },
       })
 
-      // Il backend ha emesso l'evento setup-complete
-      // Aspetta che la finestra principale sia pronta prima di chiudere il setup
-      // Verifica che la finestra principale esista e sia visibile
+      // The backend emitted the setup-complete event.
+      // Wait until the main window is ready before closing the setup,
+      // verifying that it exists and is visible.
       let attempts = 0
-      const maxAttempts = 20 // 2 secondi totali (20 * 100ms)
+      const maxAttempts = 20 // 2 seconds total (20 * 100ms)
 
       const checkAndClose = async () => {
         attempts++
         try {
-          // Verifica se la finestra principale esiste e è visibile
-          // Usa l'API corretta di Tauri v2
+          // Check whether the main window exists and is visible
+          // using the proper Tauri v2 API
           const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
           const mainWindow = (await WebviewWindow.getByLabel('main')) as WebviewWindow | null
 
@@ -192,7 +214,7 @@
               const isVisible = await mainWindow.isVisible()
               if (isVisible) {
                 console.log('Main window is visible, closing setup...')
-                // Aspetta ancora un po' per assicurarsi che la finestra principale sia completamente caricata
+                // Wait a bit longer to make sure the main window is fully loaded
                 await new Promise((resolve) => setTimeout(resolve, 300))
                 const currentWindow = WebviewWindow.getCurrent()
                 if (currentWindow) {
@@ -205,11 +227,11 @@
             }
           }
 
-          // Se non abbiamo ancora trovato la finestra principale, riprova
+          // If the main window has not been found yet, retry
           if (attempts < maxAttempts) {
             setTimeout(checkAndClose, 100)
           } else {
-            // Timeout: chiudi comunque il setup
+            // Timeout: close the setup anyway
             console.warn('Timeout waiting for main window, closing setup anyway...')
             const currentWindow = WebviewWindow.getCurrent()
             if (currentWindow) {
@@ -223,7 +245,7 @@
           }
         } catch (err) {
           console.error('Error checking windows:', err)
-          // Fallback: chiudi dopo un delay
+          // Fallback: close after a delay
           if (attempts >= maxAttempts) {
             const currentWindow = WebviewWindow.getCurrent()
             if (currentWindow) {
@@ -240,7 +262,7 @@
         }
       }
 
-      // Inizia il check dopo un piccolo delay per dare tempo al backend
+      // Start checking after a short delay to give the backend time
       setTimeout(checkAndClose, 200)
     } catch (error) {
       console.error('Failed to complete setup:', error)
@@ -255,14 +277,10 @@
     await invoke('cmd_exit')
   }
 
-  function handleDragStart(e: MouseEvent) {
-    // Solo se clicchi sulla titlebar
-    const target = e.target as HTMLElement
-    if (target.closest('.titlebar')) {
-      const window = WebviewWindow.getCurrent()
-      window?.startDragging()
-    }
-  }
+  // NOTE: window dragging is handled entirely by the shared <Titlebar>
+  // component (single-click-move threshold before startDragging). Do not add
+  // another startDragging() call here — a second initiator reintroduces the
+  // Windows stuck-drag bug.
 </script>
 
 <div class="setup-container" class:windows-10={isWindows10}>
@@ -273,6 +291,20 @@
       <h1>{$t('Welcome to Tommy Memory Cleaner')}</h1>
       <img src="/icon.png" alt="Tommy Memory Cleaner" class="app-icon" />
     </div>
+
+    {#if elevationWarning}
+      <div class="elevation-warning">
+        <div class="warning-content">
+          <p>Administrator privileges required for full memory optimization capabilities</p>
+          <small>{$t('Some advanced features require administrator privileges')}</small>
+          {#if !isElevated}
+            <button class="elevate-btn" on:click={() => invoke('cmd_restart_with_elevation')}>
+              {$t('Run as Administrator')}
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     <div class="setup-options">
       <div class="option-group">
@@ -365,7 +397,7 @@
     box-sizing: border-box;
   }
 
-  /* Fix per il padding-top della titlebar nel setup */
+  /* Fix for the titlebar padding-top inside the setup */
   :global(.app) {
     padding-top: 0 !important;
   }
@@ -382,7 +414,7 @@
     animation: fadeIn 0.2s ease;
   }
   
-  /* Applica border-radius solo su Windows 10 */
+  /* Apply border-radius only on Windows 10 */
   .setup-container.windows-10 {
     border-radius: var(--window-border-radius, 16px);
   }
@@ -390,7 +422,7 @@
   .setup-content {
     flex: 1;
     padding: 10px;
-    padding-top: var(--titlebar-height, 32px); /* Usa la variabile CSS come gli altri */
+    padding-top: var(--titlebar-height, 32px); /* Use the CSS variable like the other views */
     background: var(--bg);
     overflow-y: auto;
     overflow-x: hidden;
@@ -400,7 +432,7 @@
     gap: 8px;
   }
   
-  /* Scrollbar styling come nella full view */
+  /* Scrollbar styling matching the full view */
   .setup-content::-webkit-scrollbar {
     width: 5px;
   }
@@ -447,6 +479,67 @@
     height: 56px;
     object-fit: contain;
     flex-shrink: 0;
+  }
+
+  .elevation-warning {
+    background: linear-gradient(135deg, rgba(220, 120, 50, 0.1) 0%, rgba(220, 100, 30, 0.05) 100%);
+    border: 1px solid rgba(220, 120, 50, 0.3);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .warning-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .warning-content p {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  .warning-content small {
+    margin: 0;
+    font-size: 11px;
+    opacity: 0.8;
+    color: var(--fg);
+  }
+
+  .elevation-warning .elevate-btn {
+    background: linear-gradient(135deg, #dc7832 0%, #d86420 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: url('/cursors/light/hand.cur'), pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+    width: fit-content;
+  }
+
+  .elevation-warning .elevate-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 120, 50, 0.3);
+  }
+
+  .elevation-warning .elevate-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(220, 120, 50, 0.2);
+  }
+
+  html[data-theme='dark'] .elevation-warning .elevate-btn {
+    cursor: url('/cursors/dark/hand.cur'), pointer;
   }
 
   .setup-options {
@@ -533,7 +626,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: url('/cursors/light/hand.cur'), pointer;
-    transition: none; /* Rimuovi transizioni che potrebbero causare trasparenza */
+    transition: none; /* Remove transitions that could cause transparency artifacts */
     /* Rimuovi trasparenza */
     opacity: 1 !important;
     background-color: var(--btn-bg) !important;
@@ -546,7 +639,7 @@
   }
 
   .complete-btn:disabled {
-    opacity: 1 !important; /* Rimuovi trasparenza anche quando disabilitato */
+    opacity: 1 !important; /* Keep full opacity even when disabled */
     cursor: url('/cursors/light/no.cur'), not-allowed;
   }
   
@@ -562,7 +655,7 @@
     transform: none !important;
   }
 
-  /* DISABILITA COMPLETAMENTE LO SHIMMER IN TUTTO IL SETUP */
+  /* COMPLETELY DISABLE SHIMMER THROUGHOUT THE SETUP */
   .setup-container :global(.option-item.selected::after),
   .setup-container :global([data-theme='light'] .option-item.selected::after),
   .setup-container :global(html[data-theme='dark'] .option-item.selected::after),

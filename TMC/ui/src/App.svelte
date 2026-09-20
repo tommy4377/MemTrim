@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import type { ComponentType } from 'svelte'
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
   import { LogicalSize, type PhysicalSize } from '@tauri-apps/api/window'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import Titlebar from './components/Titlebar.svelte'
 
   // Lazy load components for better performance
-  let CompactView: any = null
-  let FullView: any = null
+  let CompactView: ComponentType | null = null
+  let FullView: ComponentType | null = null
 
   // Load components when needed
   async function loadComponents() {
@@ -45,13 +46,15 @@
   let isCompact = false
   let isLoading = true
   let initError: string | null = null
+  let isElevated = true
+  let elevationWarning = ''
 
   // Subscriptions
   let configUnsub: (() => void) | null = null
   let resizeUnlisten: UnlistenFn | null = null
   let moveUnlisten: UnlistenFn | null = null
   
-  // Listener per resize
+  // Resize listener
   let handleResize: () => void
 
   // Window dimensions
@@ -64,10 +67,10 @@
 
   // ========== LIFECYCLE ==========
   onMount(async () => {
-    // Log della dimensione della finestra
+    // Log the window size
     console.log(`Window size: ${window.innerWidth}x${window.innerHeight}px`)
-    
-    // 1. Leggi la configurazione iniziale
+
+    // 1. Read the initial configuration
     let currentConfig = await getConfig()
     
     // 2. ALWAYS detect platform on every startup for correct border styling
@@ -97,7 +100,7 @@
       applyThemeColors(currentConfig)
     }
 
-    // 3. Setup window CON la configurazione aggiornata
+    // 3. Set up the window WITH the updated configuration
     await setupWindow(currentConfig)
     
     // 4. Initialize app
@@ -123,6 +126,9 @@
     isLoading = false
     initError = null
 
+    // Check elevation status for warning banner
+    await checkElevation()
+
     // 5. Subscribe to config changes
     configUnsub = config.subscribe((v) => {
       cfg = v
@@ -141,7 +147,7 @@
       setLanguage(cfg.language as 'en' | 'it' | 'es' | 'fr' | 'pt' | 'de' | 'ar' | 'ja')
     }
 
-    // Listener per resize
+    // Resize listener
     handleResize = () => {
       console.log(`Window resized to: ${window.innerWidth}x${window.innerHeight}px`)
     }
@@ -172,11 +178,12 @@
 
     // Listen for setup-complete event to reload config
     const setupCompleteUnlisten = await listen('setup-complete', async () => {
-      // Ricarica la configurazione quando il setup è completato
       if (isAppInitialized()) {
-        await initApp()
-        // La config verrà aggiornata automaticamente tramite il subscribe sopra
-        
+        // Lightweight config reload instead of full re-initialization
+        const newConfig = await getConfig()
+        if (newConfig) {
+          config.set(newConfig)
+        }
         // Trigger scrollbar fix immediately after setup
         // Uses a small delay to ensure window visibility
         setTimeout(() => applyScrollbarFix(), 500);
@@ -188,7 +195,7 @@
       // Handle resize if needed
     })
 
-    // Listener per monitor change - centra su nuovo monitor quando necessario
+    // Monitor change listener - re-centers on the new monitor when needed
     const monitorUnlisten = await listen('tauri://window-scale-factor-changed', async () => {
       await handleMonitorChange()
     })
@@ -197,7 +204,7 @@
   })
 
   onDestroy(() => {
-    // FIX #10: Cleanup completo di tutte le risorse
+    // FIX #10: Full cleanup of all resources
     if (configUnsub) {
       configUnsub()
       configUnsub = null
@@ -213,10 +220,10 @@
       moveUnlisten = null
     }
     
-    // Rimuovi il listener per resize
+    // Remove the resize listener
     window.removeEventListener('resize', handleResize)
 
-    // Cleanup memory refresh e app state
+    // Clean up memory refresh and app state
     stopMemoryRefresh()
     cleanupApp().catch(console.error)
   })
@@ -224,7 +231,7 @@
   // ========== WINDOW MANAGEMENT ==========
   async function setupWindow(config: Config) {
     try {
-      // Mostra la finestra nella taskbar
+      // Show the window in the taskbar
       await appWindow.setSkipTaskbar(false)
 
       // Set initial size based on config
@@ -243,6 +250,24 @@
       await appWindow.setFocus()
     } catch (error) {
       console.error('Failed to setup window:', error)
+    }
+  }
+
+  async function checkElevation() {
+    try {
+      // cmd_check_elevation performs a live token check and is the single
+      // source of truth. (cmd_is_elevation_required only reflects a flag
+      // captured at process start and can never contradict the token check,
+      // so consulting it first only risked showing a stale banner.)
+      const result = await invoke<any>('cmd_check_elevation')
+      isElevated = result.is_elevated
+      elevationWarning = isElevated
+        ? ''
+        : 'Administrator privileges are required to optimize memory. Please restart as administrator.'
+    } catch (error) {
+      // A transient IPC failure must not produce a scary banner while the
+      // app may well be elevated — log it and keep the current state.
+      console.error('Failed to check elevation:', error)
     }
   }
 
@@ -288,13 +313,9 @@
         await appWindow.setResizable(false)
       }
 
-      // FIX: Re-apply rounded corners on Windows 10 to ensure border is correct
-      // This helps with "glitchy" transitions
-      try {
-        await invoke('cmd_apply_rounded_corners')
-      } catch (e) {
-        console.error('Failed to re-apply rounded corners:', e)
-      }
+      // No corner reapplication needed here:
+      // - Win11: DWM rounding is a persistent window attribute
+      // - Win10: rounding is pure CSS and scales with the window
     } catch (error) {
       console.error('Failed to update window size:', error)
     }
@@ -337,11 +358,10 @@
 
   // ========== ERROR RECOVERY ==========
   async function retryInit() {
-    onMount(async () => {
-    // Log della dimensione della finestra
+    // Log the window size
     console.log(`Window size: ${window.innerWidth}x${window.innerHeight}px`)
-    
-    // Inizializzazione app
+
+    // App initialization
     try {
       await initApp()
       isLoading = false
@@ -352,7 +372,6 @@
       initError = error instanceof Error ? error.message : 'Retry failed'
       isLoading = false
     }
-  })
   }
 
   // ========== KEYBOARD SHORTCUTS ==========
@@ -365,7 +384,7 @@
         .catch(console.error)
     }
 
-    // ESC: Toggle between compact and full mode (BIDIREZIONALE)
+    // ESC: Toggle between compact and full mode (works both ways)
     if (event.key === 'Escape') {
       event.preventDefault()
       // Toggle compact mode
@@ -394,6 +413,32 @@
   {:else}
     <!-- Main App -->
     <Titlebar />
+    {#if elevationWarning && !isCompact}
+      <div class="elevation-warning">
+        <div class="warning-content">
+          <p>{elevationWarning}</p>
+          <button class="elevate-btn" on:click={async () => {
+            try {
+              await invoke('cmd_restart_with_elevation');
+              // On success the backend exits this process and starts the
+              // elevated instance; nothing more to do here.
+            } catch (e) {
+              console.error('Elevation restart failed:', e);
+              const message = String(e);
+              if (message.toLowerCase().includes('cancelled')) {
+                // The user declined the UAC prompt — not an error. Re-check
+                // and keep the standard (non-alarming) warning text.
+                await checkElevation();
+              } else {
+                elevationWarning = `Failed to restart as administrator: ${e}. Please close the app and run it manually as administrator.`;
+              }
+            }
+          }}>
+            Run as Administrator
+          </button>
+        </div>
+      </div>
+    {/if}
     {#if isCompact}
       {#await loadComponents() then}
         <svelte:component this={CompactView} />
@@ -431,14 +476,16 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     image-rendering: crisp-edges;
-    border-radius: var(--window-border-radius, 16px);  /* Synced with backend */
+    /* Set by the backend via cmd_get_window_config: 16px on Win10 (CSS-drawn corners),
+       0px on Win11 (DWM rounds the window natively) */
+    border-radius: var(--window-border-radius, 16px);
     /* Ensure no positioning issues */
     position: relative;
     top: 0;
     left: 0;
   }
 
-  /* Rimuove eventuali bordi visibili su Windows 10 */
+  /* Remove any visible borders on Windows 10 */
   :global(body) {
     border: none !important;
     outline: none !important;
@@ -467,7 +514,7 @@
     overflow: hidden;
     position: relative;
     animation: fadeIn 0.2s ease;
-    /* Match border-radius with Rust window.rs for seamless rounded corners */
+    /* Platform-aware radius from the backend (16px Win10 / 0px Win11) */
     border-radius: var(--window-border-radius, 16px);
     /* Ensure content stays within rounded bounds */
     border: 1px solid transparent;
@@ -559,5 +606,55 @@
 
   .retry-button:active {
     transform: translateY(0);
+  }
+
+  .elevation-warning {
+    background: linear-gradient(135deg, rgba(220, 120, 50, 0.1) 0%, rgba(220, 100, 30, 0.05) 100%);
+    border: 1px solid rgba(220, 120, 50, 0.3);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 4px 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .warning-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .warning-content p {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  .elevation-warning .elevate-btn {
+    background: linear-gradient(135deg, #dc7832 0%, #d86420 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+    width: fit-content;
+  }
+
+  .elevation-warning .elevate-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 120, 50, 0.3);
+  }
+
+  .elevation-warning .elevate-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(220, 120, 50, 0.2);
   }
 </style>
