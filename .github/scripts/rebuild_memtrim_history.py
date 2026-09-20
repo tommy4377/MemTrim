@@ -183,6 +183,8 @@ No open-source license is granted yet. A project-wide license can be added after
  wr(W/".github/dependabot.yml","version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /MemTrim/ui\n    schedule: {interval: weekly}\n  - package-ecosystem: cargo\n    directory: /MemTrim/src-tauri\n    schedule: {interval: weekly}\n  - package-ecosystem: github-actions\n    directory: /\n    schedule: {interval: weekly}\n")
  wr(W/".github/workflows/ci.yml","name: CI\non:\n  push: {branches: [main]}\n  pull_request: {branches: [main]}\npermissions: {contents: read}\njobs:\n  validate:\n    runs-on: windows-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: {node-version: 20}\n      - working-directory: MemTrim/ui\n        run: npm install\n      - working-directory: MemTrim/ui\n        run: npm run check\n      - working-directory: MemTrim/ui\n        run: npm run build\n      - working-directory: MemTrim/src-tauri\n        run: cargo fmt --check\n      - working-directory: MemTrim/src-tauri\n        run: cargo check\n")
  shutil.rmtree(W/".github/workflows",ignore_errors=True)
+ for rp in (new/"src-tauri").rglob("*.rs"):
+  txt=rp.read_text(encoding="utf-8"); wr(rp,"\n".join(x.rstrip() for x in txt.splitlines())+"\n")
  run("cargo","fmt",cwd=new/"src-tauri")
  shutil.rmtree(W/".github/scripts",ignore_errors=True)
 def tree():
