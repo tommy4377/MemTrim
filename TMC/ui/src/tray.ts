@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { areasForProfile, areasToString } from './lib/profiles';
 
 const win = getCurrentWebviewWindow();
 
@@ -53,10 +54,29 @@ async function handleAction(action: string) {
         if (action === 'open') {
             await invoke('cmd_show_or_create_window');
         } else if (action === 'optimize') {
-            await invoke('cmd_optimize_async', { 
-                reason: 'Manual', 
-                areas: 'WORKING_SET|STANDBY_LIST|MODIFIED_PAGE_LIST|SYSTEM_FILE_CACHE' 
-            });
+            // FIX: Leggi il profilo corrente dalla configurazione e usa le aree corrette
+            try {
+                const config = await invoke('cmd_get_config');
+                const profile = config.profile || 'Balanced';
+                
+                // Usa la funzione areasForProfile per ottenere le aree corrette
+                const areas = areasForProfile(profile);
+                const areasString = areasToString(areas);
+                
+                await invoke('cmd_optimize_async', { 
+                    reason: 'Manual', 
+                    areas: areasString 
+                });
+            } catch (err) {
+                console.error('Failed to get config for optimization, using default balanced profile:', err);
+                // Fallback a balanced se non riesce a leggere la config
+                const defaultAreas = areasForProfile('Balanced');
+                const defaultAreasString = areasToString(defaultAreas);
+                await invoke('cmd_optimize_async', { 
+                    reason: 'Manual', 
+                    areas: defaultAreasString 
+                });
+            }
         } else if (action === 'exit') {
             await invoke('cmd_exit');
         }
@@ -93,119 +113,34 @@ setTimeout(() => { isInitializing = false; }, 500);
 // Funzione per chiudere il menu
 function closeMenu() {
     if (isInitializing) return;
+    document.body.classList.remove('menu-open');
     win.hide().catch(() => {});
 }
 
-// Chiudi quando la finestra perde il focus (click fuori) - più aggressivo
-window.addEventListener('blur', () => {
-    closeMenu();
-}, true);
+// Funzione per mostrare il menu
+function showMenu() {
+    document.body.classList.add('menu-open');
+}
 
-// Listener aggiuntivo per focusout
-window.addEventListener('focusout', () => {
-    setTimeout(() => {
-        if (!document.hasFocus()) {
-            closeMenu();
-        }
-    }, 10);
-}, true);
+// Mostra il menu quando la finestra diventa visibile
+if (!document.hidden) {
+    showMenu();
+}
 
-// Chiudi quando si clicca fuori - usa click invece di mousedown
-document.addEventListener('click', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (menuContainer && !menuContainer.contains(target)) {
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        showMenu();
+    } else {
         closeMenu();
     }
-}, true); // Usa capture phase per catturare prima che l'evento venga gestito
+});
 
-// Chiudi quando si clicca fuori - anche con mousedown come fallback
-document.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (menuContainer && !menuContainer.contains(target)) {
-        closeMenu();
-    }
-}, true);
+// Rimuoviamo l'overlay - non più necessario per il click fuori
 
 // Chiudi quando si preme ESC
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeMenu();
-    }
-});
-
-// Chiudi quando la finestra perde il focus (focusout)
-document.addEventListener('focusout', (e) => {
-    // Aspetta un po' per vedere se un altro elemento riceve il focus
-    setTimeout(() => {
-        if (!document.hasFocus()) {
-            closeMenu();
-        }
-    }, 100);
-}, true);
-
-// Listener per click sul body (overlay trasparente) - più aggressivo
-// Usa window invece di document.body per catturare meglio
-window.addEventListener('click', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as HTMLElement;
-    // Se il click è sul body/html o su un elemento che non è il menu, chiudi
-    if (!target || 
-        target === document.body || 
-        target === document.documentElement ||
-        (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-        return false;
-    }
-}, true);
-
-// Listener aggiuntivo per mousedown
-window.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as HTMLElement;
-    if (!target || 
-        target === document.body || 
-        target === document.documentElement ||
-        (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-        return false;
-    }
-}, true);
-
-// Listener per quando il mouse esce dalla finestra
-document.addEventListener('mouseleave', () => {
-    closeMenu();
-});
-
-// Listener per quando la finestra perde il focus (più aggressivo)
-window.addEventListener('focusout', () => {
-    setTimeout(() => {
-        if (!document.hasFocus() && !document.activeElement) {
-            closeMenu();
-        }
-    }, 50);
-}, true);
-
-// Listener aggiuntivo per mousedown sul body
-document.body.addEventListener('mousedown', (e) => {
-    const menuContainer = document.querySelector('.menu-container');
-    const target = e.target as Node;
-    if (target === document.body || (menuContainer && !menuContainer.contains(target))) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-    }
-}, true);
-
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-        // Ricarica sempre la configurazione quando la finestra diventa visibile
-        loadConfig();
     }
 });
 
