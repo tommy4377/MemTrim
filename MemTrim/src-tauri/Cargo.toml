@@ -44,7 +44,7 @@ scopeguard = "1.2"
 parking_lot = "0.12"
 
 # Directories
-dirs = "5.0"
+dirs = "7.0"
 
 # Random for anti-detection
 rand = "0.8"
