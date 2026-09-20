@@ -34,7 +34,7 @@ def clean():
   elif p.is_dir() and p.name.lower() in {"releases","windows-fix","file_bordi"}: shutil.rmtree(p,ignore_errors=True)
 def noup(b):
  p=b/"ui/src/components/BasicSettings.svelte"
- if p.exists(): wr(p,re.sub(r'\n\s*<div class="row">\s*<label>\s*<input[^>]*checked=\{cfg\?\.auto_update\}[^>]*/>\s*\{\$t\(\'Auto update\'\)\}\s*</label>\s*</div>\s*',"\n",p.read_text(encoding="utf-8"),flags=re.S))
+ if p.exists(): wr(p,re.sub(r'\n\s*<div class="row">\s*<label>\s*<input.*?checked=\{cfg\?\.auto_update\}.*?/>\s*\{\$t\(\'Auto update\'\)\}\s*</label>\s*</div>\s*',"\n",p.read_text(encoding="utf-8"),flags=re.S))
  for rel,pat in {
  "ui/src/lib/types.ts":r'(?m)^\s*auto_update:\s*boolean\s*\n',
  "src-tauri/src/config/mod.rs":r'(?m)^\s*(?:pub auto_update:\s*bool,|auto_update:\s*(?:true|false),)\s*\n',
