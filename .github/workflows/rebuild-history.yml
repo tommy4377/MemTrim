@@ -38,6 +38,11 @@ jobs:
         run: |
           python -c "import base64,gzip,pathlib; parts=sorted(pathlib.Path('.github/scripts').glob('rebuild_memtrim_history.part*')); data=''.join(p.read_text().strip() for p in parts); pathlib.Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py').write_bytes(gzip.decompress(base64.b64decode(data)))"
 
+      - name: Patch rebuild script
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; p=Path(r'$env:RUNNER_TEMP\rebuild_memtrim_history.py'); s=p.read_text(); p.write_text(s.replace('|(?m)^\\s*auto_update:', '|^\\s*auto_update:'))"
+
       - name: Configure Git identity
         shell: pwsh
         run: |
