@@ -1,6 +1,6 @@
 {
   "productName": "Tommy Memory Cleaner",
-  "version": "2.5.0",
+  "version": "3.0.0",
   "identifier": "TommyMemoryCleaner",
   "build": {
     "beforeDevCommand": {
@@ -19,16 +19,16 @@
       {
         "label": "main",
         "title": "Tommy Memory Cleaner",
-        "width": 490,
+        "width": 500,
         "height": 700,
         "minWidth": 390,
         "minHeight": 190,
-        "maxWidth": 490,
+        "maxWidth": 500,
         "maxHeight": 700,
         "resizable": false,
         "decorations": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "center": true,
         "skipTaskbar": false,
         "alwaysOnTop": false,
@@ -37,7 +37,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:* http://localhost:*",
+      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:* http://localhost:*",
       "devCsp": null,
       "freezePrototype": false,
       "dangerousDisableAssetCspModification": false
@@ -53,9 +53,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-        "resources": [
-          "../ui/dist/tray.html"
-        ],
+    "resources": [
+      "../ui/dist/tray.html"
+    ],
     "externalBin": [],
     "copyright": "© 2025 Tommy437",
     "category": "Utility",

@@ -177,53 +177,7 @@ fn ensure_privileges_initialized() -> Result<(), String> {
 // ============= TRAY MENU (Tauri v2) =============
 // Tray menu is managed directly in the builder, see ui::tray::build()
 
-/// Refresh the tray icon based on current memory usage
-///
-/// This function updates the system tray icon to reflect current memory
-/// usage when enabled in settings. Uses non-blocking locks to prevent deadlocks.
-fn refresh_tray_icon(app: &AppHandle) {
-    let state = app.state::<AppState>();
 
-    // Use try_lock to avoid deadlocks and acquire all necessary info
-    let (_show_mem_usage, mem_percent) = {
-        // Try to acquire lock without blocking
-        match state.cfg.try_lock() {
-            Ok(c) => {
-                let show_mem = c.tray.show_mem_usage;
-                // Release lock BEFORE calling engine.memory() to avoid deadlock
-                drop(c);
-
-                if !show_mem {
-                    tracing::debug!(
-                        "refresh_tray_icon: show_mem_usage is false, will load default icon"
-                    );
-                    (false, 0)
-                } else {
-                    // Now that lock is released, we can safely call memory()
-                    let mem_percent = state
-                        .engine
-                        .memory()
-                        .map(|mem| {
-                            // Clamp percentage between 0-100 (should already be in range, but for safety)
-                            mem.physical.used.percentage.min(100)
-                        })
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Failed to get memory info: {}, using 0", e);
-                            0
-                        });
-                    (true, mem_percent)
-                }
-            }
-            Err(_) => {
-                tracing::debug!("Config lock busy, skipping tray icon update");
-                (false, 0)
-            }
-        }
-    };
-
-    // If show_mem_usage is false, update_tray_icon will use default icon
-    crate::ui::tray::update_tray_icon(app, mem_percent);
-}
 
 // ============= AREA PARSING =============
 /// Parse areas string from configuration into Areas bitflags
@@ -343,7 +297,7 @@ async fn perform_optimization(
         tracing::info!("First optimization setup complete, proceeding with optimization");
     }
 
-    let (areas, show_notif, profile, _language) = {
+    let (areas, _show_notif, profile, _language) = {
         match cfg.lock() {
             Ok(c) => {
                 // If areas_override is specified, use it, otherwise use areas from profile
@@ -399,8 +353,31 @@ async fn perform_optimization(
         let _ = app.emit(EV_DONE, ());
     }
 
-    // FIX: Only show notification if optimization was actually successful
-    if show_notif {
+    // FIX: Verify notification setting (reload from disk to be sure)
+    let show_notif = {
+        // Force reload config to pick up changes from Setup
+        match crate::config::Config::load() {
+            Ok(loaded) => loaded.show_opt_notifications,
+            Err(_) => {
+                // Fallback to memory if load fails
+                if let Ok(guard) = cfg.lock() {
+                    guard.show_opt_notifications
+                } else {
+                    true
+                }
+            }
+        }
+    };
+
+    // Debug log to verify logic
+    tracing::info!("Notification check: show_settings={}, reason={:?}", show_notif, reason);
+
+    // Check if notifications are globally disabled for this reason
+    if !show_notif && reason != Reason::Manual {
+        tracing::debug!("Notifications disabled in config, suppressing");
+        // Only suppress if NOT manual (user clicked Optimize Now)
+        return; 
+    } else if show_notif || reason == Reason::Manual {
         if let (Ok(res), Some(aft)) = (result, after) {
             let freed_mb = res.freed_physical_bytes.abs() as f64 / 1024.0 / 1024.0;
             let free_gb = aft.physical.free.bytes as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1041,6 +1018,7 @@ fn main() {
             }
 
             // Build tray icon - handle errors without crashing
+            // NOTE: During first run (setup), we build the tray but delay activation
             let mut tray_builder = match ui::tray::build(app_handle) {
                 Ok(builder) => {
                     tracing::info!("Tray icon builder created successfully");
@@ -1054,7 +1032,23 @@ fn main() {
             };
 
             // FIX: Rimosso il tipo esplicito errato. Lasciamo che Rust deduca i tipi.
-            tray_builder = tray_builder.on_tray_icon_event(|tray, event| {
+            // Check is_first_run to prevent tray actions during setup
+            let is_first_run_for_tray = is_first_run;
+            tray_builder = tray_builder.on_tray_icon_event(move |tray, event| {
+                // During first run (setup), ignore tray clicks
+                if is_first_run_for_tray {
+                    // Check if setup is now completed by looking for main window
+                    let app = tray.app_handle();
+                    if let Some(state) = app.try_state::<AppState>() {
+                        if let Ok(cfg) = state.cfg.try_lock() {
+                            if !cfg.setup_completed {
+                                tracing::debug!("Ignoring tray click during setup");
+                                return;
+                            }
+                        }
+                    }
+                }
+                
                 // Collega positioner
                 tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
 
@@ -1176,16 +1170,16 @@ fn main() {
                 let app_clone = app_handle.clone();
                 match WebviewWindowBuilder::new(&app_clone, "setup", setup_url)
                     .title("Tommy Memory Cleaner - Setup")
-                    .inner_size(490.0, 600.0)
+                    .inner_size(500.0, 600.0)
                     .min_inner_size(380.0, 500.0)
-                    .max_inner_size(490.0, 700.0)
+                    .max_inner_size(500.0, 600.0)
                     .resizable(false)
                     .decorations(false)
                     .transparent(true)
                     .shadow(false)
                     .skip_taskbar(false)
                     .always_on_top(true)
-                    .visible(true)  // Show window immediately for SetWindowRgn
+                    .visible(false)  // Show window only after customizations
                     .build()
                 {
                     Ok(setup_window) => {
@@ -1206,6 +1200,11 @@ fn main() {
                                 let _ = crate::system::window::set_rounded_corners(hwnd.0 as windows_sys::Win32::Foundation::HWND);
                             }
                         }
+                        
+                        // Show window after customizations are applied
+                        // This prevents the "XP bar" flash on Windows 10
+                        tracing::info!("Showing setup window after applying styles");
+                        let _ = setup_window.show();
                         
                         let _ = setup_window.set_focus();
                         
@@ -1244,6 +1243,15 @@ fn main() {
                     if let Err(e) = window.set_focus() {
                         tracing::warn!("Failed to focus window: {:?}", e);
                     }
+                    
+                    // CRITICAL FIX: Apply rounded corners on Windows 10/11 at startup
+                    // This ensures borders are applied even when setup is already completed
+                    #[cfg(windows)]
+                    {
+                        tracing::info!("Applying window decorations at startup (setup already completed)");
+                        let _ = crate::system::window::apply_window_decorations(&window);
+                    }
+                    
                     // FIX: Abilita devtools per debug (tasto destro -> Inspect)
                     #[cfg(debug_assertions)]
                     {
@@ -1294,20 +1302,24 @@ fn main() {
                 let _ = crate::system::priority::set_priority(c.run_priority.clone());
             }
 
-            // Avvia i thread background
-            // Avvia i thread background
-            let engine_for_tray = state.engine.clone();
-            crate::ui::tray::start_tray_updater(
-                app_handle.clone(),
-                engine_for_tray
-            );
+            // Start background threads ONLY if setup is already completed
+            // During first run, these will be started after setup completes via event
+            if !is_first_run {
+                let engine_for_tray = state.engine.clone();
+                crate::ui::tray::start_tray_updater(
+                    app_handle.clone(),
+                    engine_for_tray
+                );
 
-            let engine_for_auto = state.engine.clone();
-            start_auto_optimizer(
-                app_handle.clone(),
-                engine_for_auto,
-                cfg.clone()
-            );
+                let engine_for_auto = state.engine.clone();
+                start_auto_optimizer(
+                    app_handle.clone(),
+                    engine_for_auto,
+                    cfg.clone()
+                );
+            } else {
+                tracing::info!("First run: background processes delayed until setup completion");
+            }
 
             Ok(())
         })
