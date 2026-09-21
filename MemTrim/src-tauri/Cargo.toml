@@ -4,7 +4,7 @@ version = "5.0.0"
 license = "MIT"
 edition = "2021"
 publish = false
-authors = ["tommy437"]
+authors = ["Tommaso Verardi"]
 description = "Advanced Memory Optimization Tool"
 
 # Windows resource file for version info
