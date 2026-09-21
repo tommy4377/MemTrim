@@ -1694,8 +1694,8 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .map_err(|e| {
-            tracing::error!("Failed to run TMC application: {:?}", e);
-            eprintln!("FATAL ERROR: Failed to run TMC application: {:?}", e);
+            tracing::error!("Failed to run MemTrim application: {:?}", e);
+            eprintln!("FATAL ERROR: Failed to run MemTrim application: {:?}", e);
             e
         })
         .unwrap_or_else(|e| {
