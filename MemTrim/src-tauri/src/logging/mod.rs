@@ -15,7 +15,7 @@ pub fn init() {
 
         let _ = tracing::subscriber::set_global_default(subscriber);
 
-        tracing::info!("TMC logging initialized");
+        tracing::info!("MemTrim logging initialized");
 
         // Log startup to Event Viewer (if possible) - safely
         // FIX: Don't crash if event logging fails
