@@ -1,4 +1,4 @@
-// 5) TMC/ui/tsconfig.json (assicurati types svelte+node e skipLibCheck)
+// TypeScript configuration for the MemTrim Svelte UI.
 {
   "compilerOptions": {
     "target": "ES2020",
