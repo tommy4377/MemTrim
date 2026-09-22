@@ -11,7 +11,90 @@ use crate::security::{
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fs, io, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+// ========== DATA DIRECTORY MIGRATION ==========
+fn move_or_merge_legacy_dir(source: &Path, target: &Path) -> io::Result<()> {
+    if !source.exists() || source == target {
+        return Ok(());
+    }
+
+    fs::create_dir_all(target)?;
+
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        let file_type = entry.file_type()?;
+
+        // Never follow links while migrating application state.
+        if file_type.is_symlink() {
+            continue;
+        }
+
+        if file_type.is_dir() {
+            move_or_merge_legacy_dir(&source_path, &target_path)?;
+            if source_path.exists() && fs::read_dir(&source_path)?.next().is_none() {
+                let _ = fs::remove_dir(&source_path);
+            }
+        } else if !target_path.exists() {
+            // Prefer a move so the old branded directory disappears. Fall back
+            // to copy+remove when the paths live on different volumes.
+            if fs::rename(&source_path, &target_path).is_err() {
+                fs::copy(&source_path, &target_path)?;
+                fs::remove_file(&source_path)?;
+            }
+        }
+    }
+
+    if source.exists() && fs::read_dir(source)?.next().is_none() {
+        let _ = fs::remove_dir(source);
+    }
+
+    Ok(())
+}
+
+fn migrate_legacy_data_dirs(target: &Path) {
+    #[cfg(windows)]
+    {
+        let mut candidates = Vec::new();
+        for variable in ["LOCALAPPDATA", "APPDATA"] {
+            if let Ok(base) = std::env::var(variable) {
+                let base = PathBuf::from(base);
+                for legacy_name in [
+                    "TommyMemoryCleaner",
+                    "Tommy Memory Cleaner",
+                    "TMC",
+                    "com.tommy4377.memtrim",
+                ] {
+                    candidates.push(base.join(legacy_name));
+                }
+            }
+        }
+
+        for source in candidates {
+            if source == target || !source.exists() {
+                continue;
+            }
+            match move_or_merge_legacy_dir(&source, target) {
+                Ok(()) => tracing::info!(
+                    "Migrated legacy MemTrim data from {} to {}",
+                    source.display(),
+                    target.display()
+                ),
+                Err(error) => tracing::warn!(
+                    "Could not migrate legacy MemTrim data from {}: {}",
+                    source.display(),
+                    error
+                ),
+            }
+        }
+    }
+}
 
 // ========== PORTABLE DETECTION ==========
 /// Detects portable installation and manages data directories
@@ -58,10 +141,10 @@ impl PortableDetector {
             }
         };
 
-        // Create directory if it doesn't exist
-        if !data_dir.exists() {
-            fs::create_dir_all(&data_dir)?;
-        }
+        // The new canonical location is always named MemTrim. Merge data
+        // from every historical application-data location before continuing.
+        fs::create_dir_all(&data_dir)?;
+        migrate_legacy_data_dirs(&data_dir);
 
         // Log where we save the data
         tracing::info!("Data directory: {}", data_dir.display());

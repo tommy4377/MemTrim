@@ -372,7 +372,7 @@ fn set_task_scheduler_startup(exe_path: &str, enable: bool) -> Result<()> {
         );
 
         // Save temporary XML
-        let temp_xml = std::env::temp_dir().join("tmc_startup_task.xml");
+        let temp_xml = std::env::temp_dir().join("memtrim_startup_task.xml");
         std::fs::write(&temp_xml, xml_content)?;
 
         // FIX #19: Use a timeout for the schtasks command

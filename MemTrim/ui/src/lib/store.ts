@@ -137,7 +137,8 @@ export async function initApp(): Promise<void> {
       // Set theme
       const theme = cfg.theme === 'light' ? 'light' : 'dark'
       document.documentElement.setAttribute('data-theme', theme)
-      localStorage.setItem('tmc_theme', theme)
+      localStorage.setItem('memtrim_theme', theme)
+      localStorage.removeItem('tmc_theme')
 
       // Apply main color based on theme
       // Priority: main_color_hex_light/dark > custom main_color_hex > default
@@ -206,7 +207,7 @@ export async function initApp(): Promise<void> {
 async function setupEventListeners(): Promise<void> {
   try {
     // Progress listener
-    appState.listeners.progress = await listen('tmc://opt_progress', (event: any) => {
+    appState.listeners.progress = await listen('memtrim://opt_progress', (event: any) => {
       const payload = event.payload as { value: number; total: number; step: string }
       progress.set({
         value: payload.value,
@@ -217,7 +218,7 @@ async function setupEventListeners(): Promise<void> {
     })
 
     // Done listener
-    appState.listeners.done = await listen('tmc://opt_done', () => {
+    appState.listeners.done = await listen('memtrim://opt_done', () => {
       progress.update((p) => ({
         ...p,
         step: 'Done',
@@ -240,7 +241,7 @@ async function setupEventListeners(): Promise<void> {
     })
 
     // Optimize now listener
-    appState.listeners.optimizeNow = await listen('tmc://optimize_now', async () => {
+    appState.listeners.optimizeNow = await listen('memtrim://optimize_now', async () => {
       try {
         const { getConfig } = await import('./api')
         const currentCfg = await getConfig()
@@ -355,7 +356,8 @@ export async function updateConfig(
       if (partial.theme !== undefined) {
         const newTheme = partial.theme === 'light' ? 'light' : 'dark'
         document.documentElement.setAttribute('data-theme', newTheme)
-        localStorage.setItem('tmc_theme', newTheme)
+        localStorage.setItem('memtrim_theme', newTheme)
+        localStorage.removeItem('tmc_theme')
 
         // Apply correct color for new theme
         // Priority: main_color_hex_light/dark > custom main_color_hex > default
@@ -560,7 +562,7 @@ if (typeof window !== 'undefined') {
 
   // Debug helpers in development
   if (import.meta.env.DEV) {
-    ;(window as any).__TMC_DEBUG = {
+    ;(window as any).__MEMTRIM_DEBUG = {
       getState: () => appState,
       getConfig: () => get(config),
       getMemory: () => get(memory),
