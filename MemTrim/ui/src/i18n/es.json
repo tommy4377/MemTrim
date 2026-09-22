@@ -44,7 +44,6 @@
   "MemTrim • Scheduled optimization": "MemTrim • Optimización programada",
   "MemTrim • Low memory optimization": "MemTrim • Optimización por memoria baja",
   "MemTrim • Hotkey optimization": "MemTrim • Optimización hotkey",
-  "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ Liberado: %.1f MB\n🧠 RAM libre: %.2f GB\n🎯 Perfil: %s",
   "RAM: %d%": "RAM: %d%",
   "Close after optimization": "Cerrar después de optimizar",
   "Close to notification area": "Cerrar al área de notificación",
@@ -84,5 +83,6 @@
   "Total freed": "Total liberado",
   "Just now": "Ahora mismo",
   "Total": "Total",
-  "Memory Freed Since Installation": "Memoria Liberada desde la Instalación"
+  "Memory Freed Since Installation": "Memoria Liberada desde la Instalación",
+  "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s": "Liberado: %.1f MB\nRAM libre: %.2f GB\nPerfil: %s"
 }
