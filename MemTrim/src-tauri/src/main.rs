@@ -924,6 +924,10 @@ fn main() {
     // Initialize logging
     logging::init();
 
+    // Complete the application rename on existing installations before any
+    // startup/elevation mechanism can launch a duplicate legacy entry.
+    crate::system::startup::cleanup_legacy_brand_artifacts();
+
     // Console mode: check if there are command line arguments
     let args: Vec<String> = std::env::args().skip(1).collect();
     if !args.is_empty() {

@@ -15,7 +15,7 @@
   let timeout: ReturnType<typeof setTimeout> | null = null
 
   onMount(async () => {
-    unlisten = await listen('tmc://show-custom-notification', (event: any) => {
+    unlisten = await listen('memtrim://show-custom-notification', (event: any) => {
       notification = event.payload as NotificationData
       visible = true
 

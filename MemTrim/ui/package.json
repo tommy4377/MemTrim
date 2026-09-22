@@ -1,7 +1,7 @@
 {
   "name": "memtrim-ui",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop frontend for the MemTrim Windows memory optimization utility",
   "license": "MIT",
   "repository": {

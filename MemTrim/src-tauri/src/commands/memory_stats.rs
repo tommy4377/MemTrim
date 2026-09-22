@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 
 /// Memory statistics data structure
 #[derive(Debug, Serialize, Deserialize)]
@@ -10,8 +9,8 @@ pub struct MemoryStats {
 
 /// Get memory statistics from app data directory
 #[tauri::command]
-pub async fn get_memory_stats(app: tauri::AppHandle) -> Result<MemoryStats, String> {
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+pub async fn get_memory_stats(_app: tauri::AppHandle) -> Result<MemoryStats, String> {
+    let app_data_dir = crate::config::get_portable_detector().data_dir().clone();
 
     // Ensure directory exists (same as in save_memory_stats)
     std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
@@ -34,11 +33,11 @@ pub async fn get_memory_stats(app: tauri::AppHandle) -> Result<MemoryStats, Stri
 /// Save memory statistics to app data directory
 #[tauri::command]
 pub async fn save_memory_stats(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     total_freed_gb: f64,
     last_updated: String,
 ) -> Result<(), String> {
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::config::get_portable_detector().data_dir().clone();
 
     // Ensure directory exists
     std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;

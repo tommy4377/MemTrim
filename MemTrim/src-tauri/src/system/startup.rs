@@ -99,6 +99,70 @@ fn app_name() -> &'static str {
     "MemTrim"
 }
 
+/// Remove persistent Windows integration left by pre-MemTrim builds.
+///
+/// This is intentionally best-effort: a failed cleanup must never prevent
+/// MemTrim from starting. Current entries are created separately under the
+/// MemTrim name when the corresponding feature is enabled.
+pub fn cleanup_legacy_brand_artifacts() {
+    #[cfg(windows)]
+    {
+        // Legacy Startup-folder shortcut.
+        if let Some(startup_folder) =
+            dirs::data_dir().map(|dir| dir.join(r"Microsoft\Windows\Start Menu\Programs\Startup"))
+        {
+            for name in [
+                "TommyMemoryCleaner.lnk",
+                "Tommy Memory Cleaner.lnk",
+                "TMC.lnk",
+            ] {
+                let path = startup_folder.join(name);
+                if path.exists() {
+                    if let Err(error) = std::fs::remove_file(&path) {
+                        tracing::debug!(
+                            "Could not remove legacy startup shortcut {}: {}",
+                            path.display(),
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        // Legacy HKCU Run values.
+        use windows_sys::Win32::System::Registry::{
+            RegCloseKey, RegDeleteValueW, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_SET_VALUE,
+        };
+        let key_wide = to_wide(RUN_KEY);
+        unsafe {
+            let mut hkey: windows_sys::Win32::System::Registry::HKEY = std::ptr::null_mut();
+            if RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                key_wide.as_ptr(),
+                0,
+                KEY_SET_VALUE,
+                &mut hkey,
+            ) == 0
+            {
+                for name in ["Tommy Memory Cleaner", "TommyMemoryCleaner", "TMC"] {
+                    let name_wide = to_wide(name);
+                    let _ = RegDeleteValueW(hkey, name_wide.as_ptr());
+                }
+                RegCloseKey(hkey);
+            }
+        }
+
+        // Legacy scheduled tasks. Ignore "not found" and permission errors;
+        // an elevated launch will get another chance on the next start.
+        for task in ["TommyMemoryCleanerAutoStart", "TommyMemoryCleanerElevated"] {
+            let mut cmd = std::process::Command::new("schtasks");
+            cmd.args(["/delete", "/tn", task, "/f"])
+                .creation_flags(0x08000000);
+            let _ = cmd.output();
+        }
+    }
+}
+
 /// Properly escape a string for safe inclusion in XML content.
 /// Handles all five XML predefined entities: & < > " '
 fn escape_xml(s: &str) -> String {
@@ -372,7 +436,7 @@ fn set_task_scheduler_startup(exe_path: &str, enable: bool) -> Result<()> {
         );
 
         // Save temporary XML
-        let temp_xml = std::env::temp_dir().join("tmc_startup_task.xml");
+        let temp_xml = std::env::temp_dir().join("memtrim_startup_task.xml");
         std::fs::write(&temp_xml, xml_content)?;
 
         // FIX #19: Use a timeout for the schtasks command
