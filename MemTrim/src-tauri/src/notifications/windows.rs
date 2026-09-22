@@ -149,7 +149,7 @@ pub fn show_windows_notification(
 
         match toast.show() {
             Ok(_) => {
-                tracing::info!("✓ Notification sent via winrt-notification (native WinRT)");
+                tracing::info!("Notification sent via winrt-notification (native WinRT)");
                 return Ok(());
             }
             Err(e) => {
@@ -163,7 +163,7 @@ pub fn show_windows_notification(
             tracing::debug!("Retrying winrt-notification without icon...");
             match Toast::new("MemTrim").title(title).text1(body).show() {
                 Ok(_) => {
-                    tracing::info!("✓ Notification sent via winrt-notification (no icon)");
+                    tracing::info!("Notification sent via winrt-notification (no icon)");
                     return Ok(());
                 }
                 Err(e) => {
@@ -212,7 +212,7 @@ pub fn show_windows_notification(
 
         match cmd.output() {
             Ok(output) if output.status.success() => {
-                tracing::info!("✓ Notification sent via PowerShell balloon (last resort)");
+                tracing::info!("Notification sent via PowerShell balloon (last resort)");
                 return Ok(());
             }
             Ok(output) => {
@@ -225,7 +225,7 @@ pub fn show_windows_notification(
         }
     }
 
-    tracing::error!("✗ All notification methods failed (winrt-notification, PowerShell balloon)");
+    tracing::error!("All notification methods failed (winrt-notification, PowerShell balloon)");
     Err("All notification methods failed. Ensure system notifications are enabled.".to_string())
 }
 
