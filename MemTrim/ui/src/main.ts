@@ -1,13 +1,15 @@
-// If using Svelte 4 (check package.json)
+import { mount } from 'svelte'
 import App from './App.svelte'
 // Import themes first, then tokens (tokens has base variables, themes override them)
 import './theme/tokens.css'
 import './theme/common.css'
 
-// For Svelte 4:
-const app = new App({
-  target: document.getElementById('app')!,
-})
+const target = document.getElementById('app')
+if (!target) {
+  throw new Error('MemTrim root element #app was not found')
+}
+
+const app = mount(App, { target })
 
 // Disable the default WebView2 context menu (Refresh, Save as, Share, ...)
 // only in production; in dev it stays available for Inspect Element

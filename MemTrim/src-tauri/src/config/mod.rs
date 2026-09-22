@@ -106,6 +106,7 @@ fn migrate_legacy_data_dirs(target: &Path) {
             if let Ok(base) = std::env::var(variable) {
                 let base = PathBuf::from(base);
                 for legacy_name in [
+                    "MemTrim",
                     "TommyMemoryCleaner",
                     "Tommy Memory Cleaner",
                     "TMC",
