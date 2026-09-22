@@ -1,0 +1,72 @@
+name: publish-memtrim-1.0.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-1.0.2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: MemTrim/ui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Checkout release snapshot
+        shell: pwsh
+        run: git checkout 215e381b2084b9dda68fbe602b306a85498f6b20
+
+      - name: Validate and build frontend
+        working-directory: MemTrim/ui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm ci
+          npm run check
+          npm run build
+
+      - name: Validate and build portable executable
+        working-directory: MemTrim/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo fmt --check
+          cargo check --locked
+          cargo build --release --locked
+
+      - name: Tag and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git tag v1.0.2 215e381b2084b9dda68fbe602b306a85498f6b20
+          git push origin refs/tags/v1.0.2
+          $notes = @(
+            '## Fixes',
+            '- Fixes the blank gray window by moving the frontend bootstrap to the supported Svelte 5 mount() API.',
+            '- Completes active runtime naming from TMC to MemTrim, including event channels and UI storage keys.',
+            '- Automatically merges legacy TMC / Tommy Memory Cleaner and roaming AppData data into %LOCALAPPDATA%\MemTrim.',
+            '- Removes emoji from optimization notification text and uses the application/SVG status icons instead.',
+            '- Preserves legacy identifiers only where needed to migrate old settings and cleanup old startup entries.',
+            '',
+            '## Upgrade',
+            'Existing settings and statistics are migrated automatically on first launch. No manual move is required.'
+          )
+          $notes | Set-Content -Encoding utf8 release-notes.md
+          gh release create v1.0.2 "MemTrim/src-tauri/target/release/MemTrim.exe#MemTrim.exe" --verify-tag --title "MemTrim v1.0.2" --notes-file release-notes.md
