@@ -36,7 +36,6 @@
   "Auto optimize every": "التحسين التلقائي كل",
   "hours": "ساعات",
   "When free RAM below": "عندما تكون الذاكرة الحرة أقل من",
-  "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ تم تحرير: %.1f MB\n🧠 ذاكرة الوصول العشوائي الحرة: %.2f GB\n🎯 الملف الشخصي: %s",
   "RAM: %d%": "ذاكرة الوصول العشوائي: %d%",
   "Disabled": "معطل",
   "Will optimize every X hours": "سيتم التحسين كل %hours% ساعات",
@@ -84,5 +83,6 @@
   "Total freed": "إجمالي المحرر",
   "Just now": "الآن",
   "Total": "إجمالي",
-  "Memory Freed Since Installation": "الذاكرة المحررة منذ التثبيت"
+  "Memory Freed Since Installation": "الذاكرة المحررة منذ التثبيت",
+  "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s": "تم تحرير: %.1f MB\nذاكرة الوصول العشوائي الحرة: %.2f GB\nالملف الشخصي: %s"
 }

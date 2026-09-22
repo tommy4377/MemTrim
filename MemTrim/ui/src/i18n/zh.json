@@ -39,7 +39,6 @@
   "Disabled": "已禁用",
   "Will optimize every X hours": "将每%hours%小时优化一次",
   "5 minute cooldown between optimizations": "优化之间5分钟冷却时间",
-  "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ 已释放: %.1f MB\n🧠 可用内存: %.2f GB\n🎯 配置文件: %s",
   "RAM: %d%": "内存: %d%",
   "Always on top": "始终置顶",
   "Close after optimization": "优化后关闭",
@@ -84,5 +83,6 @@
   "Total freed": "总计释放",
   "Just now": "刚刚",
   "Total": "总计",
-  "Memory Freed Since Installation": "自安装以来已释放内存"
+  "Memory Freed Since Installation": "自安装以来已释放内存",
+  "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s": "已释放: %.1f MB\n可用内存: %.2f GB\n配置文件: %s"
 }

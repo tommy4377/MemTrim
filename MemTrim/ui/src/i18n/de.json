@@ -36,7 +36,6 @@
   "Auto optimize every": "Automatisch optimieren alle",
   "hours": "Stunden",
   "When free RAM below": "Wenn freier RAM unter",
-  "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ Freigegeben: %.1f MB\n🧠 Freier RAM: %.2f GB\n🎯 Profil: %s",
   "RAM: %d%": "RAM: %d%",
   "Disabled": "Deaktiviert",
   "Will optimize every X hours": "Wird alle %hours% Stunden optimieren",
@@ -84,5 +83,6 @@
   "Total freed": "Insgesamt freigegeben",
   "Just now": "Gerade eben",
   "Total": "Insgesamt",
-  "Memory Freed Since Installation": "Speicher seit Installation freigegeben"
+  "Memory Freed Since Installation": "Speicher seit Installation freigegeben",
+  "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s": "Freigegeben: %.1f MB\nFreier RAM: %.2f GB\nProfil: %s"
 }

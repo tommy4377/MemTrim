@@ -36,7 +36,6 @@
   "Auto optimize every": "自動最適化間隔",
   "hours": "時間",
   "When free RAM below": "空きRAMが以下の場合",
-  "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s": "✅ 解放済み: %.1f MB\n🧠 空きRAM: %.2f GB\n🎯 プロファイル: %s",
   "RAM: %d%": "RAM: %d%",
   "Disabled": "無効",
   "Will optimize every X hours": "%hours%時間ごとに最適化します",
@@ -84,5 +83,6 @@
   "Total freed": "合計解放量",
   "Just now": "たった今",
   "Total": "合計",
-  "Memory Freed Since Installation": "インストール以来解放されたメモリ"
+  "Memory Freed Since Installation": "インストール以来解放されたメモリ",
+  "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s": "解放済み: %.1f MB\n空きRAM: %.2f GB\nプロファイル: %s"
 }
