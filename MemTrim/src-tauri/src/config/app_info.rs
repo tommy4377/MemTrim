@@ -6,7 +6,7 @@ pub const COMPANY_NAME: &str = "MemTrim";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const VERSION_FULL: &str = concat!(env!("CARGO_PKG_VERSION"), ".0");
 pub const FILE_DESCRIPTION: &str = "Advanced Memory Optimization Tool for Windows";
-pub const COPYRIGHT: &str = "© 2025 MemTrim. All rights reserved.";
+pub const COPYRIGHT: &str = "© 2025-2026 tommy4377";
 
 // Get application version in different formats
 pub fn get_version() -> &'static str {
