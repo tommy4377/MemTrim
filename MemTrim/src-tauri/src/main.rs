@@ -551,7 +551,7 @@ async fn perform_optimization(
                     let state = app.state::<AppState>();
                     crate::commands::get_translation(
                         &state.translations,
-                        "✅ Freed: %.1f MB\n🧠 Free RAM: %.2f GB\n🎯 Profile: %s",
+                        "Freed: %.1f MB\nFree RAM: %.2f GB\nProfile: %s",
                     )
                 };
 

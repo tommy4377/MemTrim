@@ -46,7 +46,7 @@
       isElevated = result.is_elevated
       
       if (!isElevated) {
-        elevationWarning = '⚠️ Administrator privileges required for full memory optimization capabilities'
+        elevationWarning = 'Administrator privileges required for full memory optimization capabilities'
       } else {
         elevationWarning = ''
       }

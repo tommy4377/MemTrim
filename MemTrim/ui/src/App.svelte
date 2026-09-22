@@ -404,7 +404,13 @@
   {:else if initError}
     <!-- Error State -->
     <div class="error">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" />
+        </svg>
+      </div>
       <div class="error-title">Failed to Initialize</div>
       <div class="error-message">{initError}</div>
       <button class="retry-button" on:click={retryInit}> Retry </button>

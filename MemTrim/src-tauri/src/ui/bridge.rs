@@ -8,8 +8,8 @@ pub struct ProgressEvent {
     pub step: String,
 }
 
-pub const EV_PROGRESS: &str = "memtrim://opt_progress";
-pub const EV_DONE: &str = "memtrim://opt_done";
+pub const EV_PROGRESS: &str = "tmc://opt_progress";
+pub const EV_DONE: &str = "tmc://opt_done";
 
 pub fn emit_progress(app: &AppHandle, value: u8, total: u8, step: &str) {
     let _ = app.emit(

@@ -15,7 +15,7 @@
   let timeout: ReturnType<typeof setTimeout> | null = null
 
   onMount(async () => {
-    unlisten = await listen('memtrim://show-custom-notification', (event: any) => {
+    unlisten = await listen('tmc://show-custom-notification', (event: any) => {
       notification = event.payload as NotificationData
       visible = true
 
@@ -35,7 +35,11 @@
 {#if visible && notification}
   <div class="notification">
     <div class="header">
-      <div class="icon">✓</div>
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      </div>
       <div class="title">Memory Optimized</div>
     </div>
 

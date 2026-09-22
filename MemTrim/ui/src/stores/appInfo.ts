@@ -13,8 +13,8 @@ interface AppInfo {
 // Create a writable store with default values
 export const appInfo = writable<AppInfo>({
   name: 'MemTrim',
-  version: '1.0.1',
-  versionFull: '1.0.1.0',
+  version: '1.0.2',
+  versionFull: '1.0.2.0',
   company: 'tommy4377',
   copyright: '© 2025-2026 tommy4377',
   description: 'Advanced Memory Optimization Tool for Windows'
