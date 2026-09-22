@@ -51,7 +51,7 @@
 
   async function onThemeChange(theme: string) {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('tmc_theme', theme)
+    localStorage.setItem('memtrim_theme', theme)
     await updateConfig({ theme })
   }
 
