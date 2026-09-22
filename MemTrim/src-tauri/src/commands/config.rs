@@ -500,7 +500,7 @@ pub fn cmd_complete_setup(
             (function() {{
                 // Apply the theme
                 document.documentElement.setAttribute('data-theme', '{}');
-                localStorage.setItem('tmc_theme', '{}');
+                localStorage.setItem('memtrim_theme', '{}');
 
                 // Apply the correct main color for the theme
                 const root = document.documentElement;
