@@ -90,7 +90,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [SUPPORT.md]
 
 Maintained by [@tommy4377](https://github.com/tommy4377).
 
-Gabriele R. / [@LAMAgalletta0IQ](https://github.com/LAMAgalletta0IQ) contributed Windows elevation, logging and window-handling work in the v4 line.
+Gabriele R. / [@LAMAgalletta0IQ](https://github.com/LAMAgalletta0IQ) contributed Windows elevation, logging and window-handling work.
 
 ## License
 

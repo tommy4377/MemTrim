@@ -44,7 +44,7 @@
     }
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": [],
     "icon": [
       "icons/32x32.png",
@@ -53,29 +53,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../ui/dist/tray.html"
-    ],
-    "externalBin": [],
-    "publisher": "MemTrim",
-    "copyright": "\u00a9 2025 MemTrim. All rights reserved.",
+    "publisher": "tommy4377",
+    "copyright": "© 2025-2026 tommy4377",
     "category": "Utility",
-    "shortDescription": "Advanced memory optimization tool",
-    "longDescription": "MemTrim - Professional memory optimization utility for Windows",
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "",
-      "tsp": false,
-      "webviewInstallMode": {
-        "type": "embedBootstrapper",
-        "silent": true
-      },
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "installMode": "perMachine"
-      }
-    }
+    "shortDescription": "Portable Windows memory optimization utility",
+    "longDescription": "MemTrim is a portable Windows memory optimization utility."
   },
   "plugins": {}
 }

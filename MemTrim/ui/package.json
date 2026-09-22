@@ -2,6 +2,16 @@
   "name": "memtrim-ui",
   "private": true,
   "version": "1.0.0",
+  "description": "Desktop frontend for the MemTrim Windows memory optimization utility",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tommy4377/MemTrim.git"
+  },
+  "homepage": "https://github.com/tommy4377/MemTrim#readme",
+  "bugs": {
+    "url": "https://github.com/tommy4377/MemTrim/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -39,6 +49,5 @@
     "tslib": "^2.6.2",
     "typescript": "~6.0.3",
     "vite": "^8.3.0"
-  },
-  "license": "MIT"
+  }
 }
